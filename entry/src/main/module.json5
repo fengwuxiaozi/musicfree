@@ -12,6 +12,10 @@
     "deliveryWithInstall": true,
     "installationFree": false,
     "pages": "$profile:main_pages",
+    "querySchemes": [
+      "https",
+      "http"
+    ],
     "abilities": [
       {
         "name": "EntryAbility",

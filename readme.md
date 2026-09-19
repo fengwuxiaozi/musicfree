@@ -2,6 +2,19 @@
 
 这是 MusicFree 的 **鸿蒙原生版**（ArkTS / ArkUI）。用 DevEco Studio 打开本仓库根目录即可编译运行。
 
+## 界面预览
+
+<p>
+  <img src="screenshots/home.jpeg" width="24%" alt="首页" />
+  <img src="screenshots/sidebar.jpeg" width="24%" alt="侧边栏" />
+  <img src="screenshots/player.jpeg" width="24%" alt="播放页" />
+  <img src="screenshots/about.jpeg" width="24%" alt="关于" />
+</p>
+<p>
+  <img src="screenshots/plugin.jpeg" width="24%" alt="插件管理" />
+  <img src="screenshots/sheet.jpeg" width="24%" alt="歌单" />
+</p>
+
 ## 和原版的对应关系
 
 - 插件化播放器：本身不内置音源，通过安装 MusicFree 协议的 `.js` 插件完成搜索、播放、歌词、歌单等

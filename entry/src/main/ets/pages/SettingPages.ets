@@ -9,6 +9,7 @@ import { WebDavService } from '../core/WebDavService';
 import { HttpUtil } from '../core/HttpUtil';
 import { picker } from '@kit.CoreFileKit';
 import { promptAction } from '@kit.ArkUI';
+import { Want } from '@kit.AbilityKit';
 
 @Component
 export struct SettingPage {
@@ -228,7 +229,27 @@ export struct AboutPage {
   @StorageLink('pageBackground') pageBackground: string = '#202020';
   @StorageLink('textColor') textColor: string = '#FCFCFC';
   @StorageLink('textSecondary') textSecondary: string = '#B3FCFCFC';
+  @StorageLink('primary') primary: string = '#3FA3B5';
+  @StorageLink('backdrop') backdrop: string = '#303030';
+  @StorageLink('divider') divider: string = '#1AFFFFFF';
   @StorageLink('appLocale') appLocale: string = 'zh-CN';
+  @StorageLink('gestureBarHeight') gestureBarHeight: number = 16;
+
+  private async openSource(): Promise<void> {
+    const ctx = AppService.context;
+    if (ctx === null) {
+      return;
+    }
+    const want: Want = {
+      action: 'ohos.want.action.viewData',
+      entities: ['entity.system.browsable'],
+      uri: 'https://github.com/maotoumao/MusicFree'
+    };
+    try {
+      await ctx.startAbility(want);
+    } catch (_e) {
+    }
+  }
 
   build() {
     Column() {
@@ -239,31 +260,87 @@ export struct AboutPage {
             .width(88)
             .height(88)
             .borderRadius(18)
-            .margin({ top: 24 })
+            .margin({ top: 28 })
             .onClick(() => {
               UpdateService.showResult(true);
             })
-          Text('MusicFree').fontSize(22).fontWeight(FontWeight.Bold).fontColor(this.textColor).margin({ top: 12 })
-          Text(`${I18n.tx(this.appLocale, 'about.harmonyVersion')}  ${APP_VERSION}`).fontSize(13).fontColor(this.textSecondary).margin({ top: 4 })
-          Row() {
-            IconImg({ name: 'arrow-path', iconSize: 18, color: this.textColor })
-            Text(I18n.tx(this.appLocale, 'sidebar.checkUpdate')).fontSize(15).fontColor(this.textColor).margin({ left: 8 })
-          }
-          .margin({ top: 16 })
-          .padding({ left: 16, right: 16, top: 10, bottom: 10 })
-          .borderRadius(8)
-          .onClick(() => {
-            UpdateService.showResult(true);
-          })
-          Text(I18n.tx(this.appLocale, 'about.author')).fontSize(14).fontColor(this.textColor).margin({ top: 24 })
-          Text(I18n.tx(this.appLocale, 'about.license'))
+          Text('MusicFree')
+            .fontSize(22)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.textColor)
+            .margin({ top: 12 })
+          Text(`${I18n.tx(this.appLocale, 'about.harmonyVersion')}  ${APP_VERSION}`)
             .fontSize(13)
             .fontColor(this.textSecondary)
-            .margin({ top: 20, left: 24, right: 24, bottom: 32 })
+            .margin({ top: 4 })
+          Text(I18n.tx(this.appLocale, 'sidebar.checkUpdate'))
+            .fontSize(14)
+            .fontColor(this.primary)
+            .margin({ top: 14 })
+            .onClick(() => {
+              UpdateService.showResult(true);
+            })
+
+          Column() {
+            this.infoRow(I18n.tx(this.appLocale, 'about.authorLabel'), I18n.tx(this.appLocale, 'about.authorName'))
+            Divider().color(this.divider).strokeWidth(1)
+            this.infoRow(I18n.tx(this.appLocale, 'about.originalAuthorLabel'), I18n.tx(this.appLocale, 'about.originalAuthorName'))
+          }
+          .width('100%')
+          .backgroundColor(this.backdrop)
+          .borderRadius(12)
+          .margin({ top: 28 })
+
+          Text(I18n.tx(this.appLocale, 'about.statementTitle'))
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.textSecondary)
             .width('100%')
-            .textAlign(TextAlign.Start)
+            .margin({ top: 20, bottom: 8 })
+            .padding({ left: 4 })
+
+          Column() {
+            Text(I18n.tx(this.appLocale, 'about.intro'))
+              .fontSize(13)
+              .fontColor(this.textColor)
+              .lineHeight(22)
+              .width('100%')
+            Text(I18n.tx(this.appLocale, 'about.licenseBody'))
+              .fontSize(13)
+              .fontColor(this.textColor)
+              .lineHeight(22)
+              .width('100%')
+              .margin({ top: 12 })
+            Row() {
+              Text(I18n.tx(this.appLocale, 'about.sourceLabel'))
+                .fontSize(13)
+                .fontColor(this.textSecondary)
+              Blank()
+              Text(I18n.tx(this.appLocale, 'about.sourceUrl'))
+                .fontSize(13)
+                .fontColor(this.primary)
+                .maxLines(1)
+            }
+            .width('100%')
+            .margin({ top: 14 })
+            .onClick(() => {
+              this.openSource();
+            })
+            Divider().color(this.divider).strokeWidth(1).margin({ top: 16, bottom: 12 })
+            Text(I18n.tx(this.appLocale, 'about.pluginHint'))
+              .fontSize(12)
+              .fontColor(this.textSecondary)
+              .lineHeight(20)
+              .width('100%')
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+          .alignItems(HorizontalAlign.Start)
+          .backgroundColor(this.backdrop)
+          .borderRadius(12)
         }
         .width('100%')
+        .padding({ left: 16, right: 16, bottom: 28 + this.gestureBarHeight })
         .alignItems(HorizontalAlign.Center)
       }
       .layoutWeight(1)
@@ -274,6 +351,21 @@ export struct AboutPage {
     .width('100%')
     .height('100%')
     .backgroundColor(this.pageBackground)
+  }
+
+  @Builder
+  infoRow(label: string, value: string) {
+    Row() {
+      Text(label)
+        .fontSize(14)
+        .fontColor(this.textSecondary)
+      Blank()
+      Text(value)
+        .fontSize(14)
+        .fontColor(this.textColor)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 14, bottom: 14 })
   }
 }
 
