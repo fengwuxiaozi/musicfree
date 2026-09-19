@@ -2,8 +2,6 @@
 
 这是 MusicFree 的 **鸿蒙原生版**（ArkTS / ArkUI，API 12+），可在 DevEco Studio 中打开 `harmonyos` 目录进行编译运行。
 
-原 React Native Android 工程仍保留在仓库根目录，互不影响。
-
 ## 和原版的对应关系
 
 - 插件化播放器：本身不内置音源，通过安装 MusicFree 协议的 `.js` 插件完成搜索、播放、歌词、歌单等
