@@ -1,19 +1,51 @@
 import { SheetItem } from '../common/Types';
-import { ROUTES, FAVORITE_SHEET_ID, APP_VERSION } from '../common/Constants';
+import { ROUTES, FAVORITE_SHEET_ID, APP_VERSION, APP_NAME, LOCAL_PLATFORM } from '../common/Constants';
 import { IconImg } from '../components/IconImg';
 import { MusicBar } from '../components/MusicBar';
+import { ScheduleClosePanel } from '../components/ScheduleClosePanel';
 import { EmptyView } from '../components/EmptyView';
 import { AppService } from '../core/AppService';
 import { I18n } from '../core/I18n';
-import { ScheduleClose } from '../core/ScheduleClose';
 import { UpdateService } from '../core/UpdateService';
 import { promptAction } from '@kit.ArkUI';
+
+@Component
+struct HomeActionCard {
+  @StorageLink('textColor') textColor: string = '#FCFCFC';
+  @StorageLink('card') card: string = '#88333333';
+  @StorageLink('appLocale') appLocale: string = 'zh-CN';
+  @Prop icon: string = '';
+  @Prop titleKey: string = '';
+  onAction: () => void = () => {
+  };
+
+  build() {
+    Column() {
+      IconImg({ name: this.icon, iconSize: 24, color: this.textColor })
+      Text(I18n.tx(this.appLocale, this.titleKey))
+        .fontSize(13)
+        .fontColor(this.textColor)
+        .margin({ top: 6 })
+        .fontWeight(FontWeight.Medium)
+    }
+    .layoutWeight(1)
+    .height(80)
+    .margin({ left: 6, right: 6 })
+    .borderRadius(9)
+    .backgroundColor(this.card)
+    .justifyContent(FlexAlign.Center)
+    .onClick(() => {
+      this.onAction();
+    })
+  }
+}
 
 @Component
 export struct HomePage {
   @StorageLink('pageBackground') pageBackground: string = '#202020';
   @StorageLink('textColor') textColor: string = '#FCFCFC';
   @StorageLink('textSecondary') textSecondary: string = '#B3FCFCFC';
+  @StorageLink('textHint') textHint: string = '#99FCFCFC';
   @StorageLink('primary') primary: string = '#3FA3B5';
   @StorageLink('placeholder') placeholder: string = '#424242';
   @StorageLink('card') card: string = '#88333333';
@@ -33,20 +65,24 @@ export struct HomePage {
   @State showCreate: boolean = false;
   @State newSheetName: string = '';
   @State tick: number = 0;
-  @State showImport: boolean = false;
-  @State importUrl: string = '';
-  @State importing: boolean = false;
   @State showSchedule: boolean = false;
-  @State exitOnClose: boolean = false;
+  @State showDelete: boolean = false;
+  @State deleteTarget: SheetItem = new SheetItem();
   @StorageLink('scheduleRemain') scheduleRemain: string = '';
   @StorageLink('appLocale') appLocale: string = 'zh-CN';
+  @StorageLink('localeRev') @Watch('onLocaleRev') localeRev: number = 0;
   @StorageLink('statusBarHeight') statusBarHeight: number = 44;
+  @StorageLink('gestureBarHeight') gestureBarHeight: number = 16;
 
   aboutToAppear(): void {
     this.refresh();
     AppService.sheets.onChange(() => {
       this.refresh();
     });
+  }
+
+  onLocaleRev(): void {
+    this.tick += 1;
   }
 
   private refresh(): void {
@@ -57,6 +93,26 @@ export struct HomePage {
 
   private currentSheets(): SheetItem[] {
     return this.tab === 0 ? this.sheets : this.starred;
+  }
+
+  private runDrawerAction(action: () => void): void {
+    this.showDrawer = false;
+    setTimeout((): void => {
+      action();
+    }, 80);
+  }
+
+  private openCreateSheet(): void {
+    this.newSheetName = '';
+    this.showCreate = true;
+  }
+
+  private confirmCreateSheet(): void {
+    const fallback = I18n.tx(this.appLocale, 'panel.createMusicSheet.title');
+    const name = this.newSheetName.trim().length > 0 ? this.newSheetName.trim() : fallback;
+    AppService.sheets.addSheet(name);
+    this.showCreate = false;
+    this.newSheetName = '';
   }
 
   build() {
@@ -78,27 +134,27 @@ export struct HomePage {
       Column() {
         Row() {
           Row() {
-            IconImg({ name: 'bars-3', iconSize: 22, color: this.textColor })
+            IconImg({ name: 'bars-3', iconSize: 21, color: this.textColor })
           }
           .width(40)
-          .height(40)
-          .margin({ left: 8 })
+          .height(44)
+          .margin({ left: 12 })
           .justifyContent(FlexAlign.Center)
           .onClick(() => {
             this.showDrawer = true;
           })
 
           Row() {
-            IconImg({ name: 'magnifying-glass', iconSize: 16, color: this.textSecondary })
-            Text(I18n.t('home.clickToSearch'))
-              .fontSize(14)
-              .fontColor(this.textSecondary)
-              .margin({ left: 8 })
+            IconImg({ name: 'magnifying-glass', iconSize: 16, color: this.textHint })
+            Text(I18n.tx(this.appLocale, 'home.clickToSearch'))
+              .fontSize(13)
+              .fontColor(this.textHint)
+              .margin({ left: 6 })
           }
           .layoutWeight(1)
-          .height(36)
-          .margin({ left: 8, right: 16 })
-          .padding({ left: 14, right: 14 })
+          .height(32)
+          .margin({ left: 12, right: 12 })
+          .padding({ left: 10, right: 10 })
           .borderRadius(18)
           .backgroundColor(this.placeholder)
           .onClick(() => {
@@ -106,16 +162,17 @@ export struct HomePage {
           })
         }
         .width('100%')
-        .height(48 + this.statusBarHeight)
+        .height(44 + this.statusBarHeight)
         .padding({ top: this.statusBarHeight })
         .alignItems(VerticalAlign.Center)
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
 
         Scroll() {
           Column() {
             this.operations()
             this.sheetHeader()
             if (this.currentSheets().length === 0) {
-              EmptyView({ text: this.tab === 0 ? I18n.t('home.emptyMySheets') : I18n.t('home.emptyStarredSheets') })
+              EmptyView({ text: this.tab === 0 ? I18n.tx(this.appLocale, 'home.emptyMySheets') : I18n.tx(this.appLocale, 'home.emptyStarredSheets') })
             } else {
               ForEach(this.currentSheets(), (sheet: SheetItem) => {
                 this.sheetRow(sheet)
@@ -148,49 +205,54 @@ export struct HomePage {
         }
         .width('100%')
         .height('100%')
+        .zIndex(8)
       }
       if (this.showLanguage) {
         this.languageOverlay()
       }
+      if (this.showDelete) {
+        this.deleteOverlay()
+      }
+      if (this.showCreate) {
+        this.createOverlay()
+      }
+      if (this.showSchedule) {
+        this.scheduleOverlay()
+      }
     }
-    .id(`home-${this.appLocale}`)
-    .bindSheet($$this.showCreate, this.createBuilder(), {
-      height: 240,
-      backgroundColor: this.backdrop,
-      blurStyle: BlurStyle.NONE,
-      maskColor: this.maskColor,
-      showClose: false
-    })
-    .bindSheet($$this.showImport, this.importBuilder(), {
-      height: 280,
-      backgroundColor: this.backdrop,
-      blurStyle: BlurStyle.NONE,
-      maskColor: this.maskColor,
-      showClose: false
-    })
-    .bindSheet($$this.showSchedule, this.scheduleBuilder(), {
-      height: 400,
-      backgroundColor: this.backdrop,
-      blurStyle: BlurStyle.NONE,
-      maskColor: this.maskColor,
-      showClose: false
-    })
+    .id(`home-${this.appLocale}-${this.localeRev}`)
   }
 
   @Builder
   operations() {
     Row() {
-      this.actionCard('fire', I18n.t('home.recommendSheet'), () => {
-        AppService.push(ROUTES.RECOMMEND);
+      HomeActionCard({
+        icon: 'fire',
+        titleKey: 'home.recommendSheet',
+        onAction: () => {
+          AppService.push(ROUTES.RECOMMEND);
+        }
       })
-      this.actionCard('trophy', I18n.t('home.topList'), () => {
-        AppService.push(ROUTES.TOP_LIST);
+      HomeActionCard({
+        icon: 'trophy',
+        titleKey: 'home.topList',
+        onAction: () => {
+          AppService.push(ROUTES.TOP_LIST);
+        }
       })
-      this.actionCard('clock-outline', I18n.t('home.playHistory'), () => {
-        AppService.push(ROUTES.HISTORY);
+      HomeActionCard({
+        icon: 'clock-outline',
+        titleKey: 'home.playHistory',
+        onAction: () => {
+          AppService.push(ROUTES.HISTORY);
+        }
       })
-      this.actionCard('folder-music-outline', I18n.t('home.localMusic'), () => {
-        AppService.push(ROUTES.LOCAL);
+      HomeActionCard({
+        icon: 'folder-music-outline',
+        titleKey: 'home.localMusic',
+        onAction: () => {
+          AppService.push(ROUTES.LOCAL);
+        }
       })
     }
     .width('100%')
@@ -199,29 +261,10 @@ export struct HomePage {
   }
 
   @Builder
-  actionCard(icon: string, title: string, action: () => void) {
-    Column() {
-      IconImg({ name: icon, iconSize: 24, color: this.textColor })
-      Text(title)
-        .fontSize(12)
-        .fontColor(this.textColor)
-        .margin({ top: 8 })
-        .fontWeight(FontWeight.Medium)
-    }
-    .layoutWeight(1)
-    .height(80)
-    .margin({ left: 6, right: 6 })
-    .borderRadius(10)
-    .backgroundColor(this.card)
-    .justifyContent(FlexAlign.Center)
-    .onClick(action)
-  }
-
-  @Builder
   sheetHeader() {
     Row() {
       Row() {
-        Text(I18n.t('home.mySheets'))
+        Text(I18n.tx(this.appLocale, 'home.myPlaylists'))
           .fontSize(16)
           .fontWeight(this.tab === 0 ? FontWeight.Bold : FontWeight.Normal)
           .fontColor(this.textColor)
@@ -236,7 +279,7 @@ export struct HomePage {
         Text(` (${this.sheets.length})`)
           .fontSize(13)
           .fontColor(this.textSecondary)
-        Text(I18n.t('home.starredSheets'))
+        Text(I18n.tx(this.appLocale, 'home.starredPlaylists'))
           .fontSize(16)
           .fontWeight(this.tab === 1 ? FontWeight.Bold : FontWeight.Normal)
           .fontColor(this.textColor)
@@ -254,17 +297,25 @@ export struct HomePage {
           .fontColor(this.textSecondary)
       }
       Blank()
-      IconImg({ name: 'plus', iconSize: 20, color: this.textColor })
-        .onClick(() => {
-          this.newSheetName = '';
-          this.showCreate = true;
-        })
-      IconImg({ name: 'inbox-arrow-down', iconSize: 20, color: this.textColor })
-        .margin({ left: 12 })
-        .onClick(() => {
-          this.importUrl = '';
-          this.showImport = true;
-        })
+      Row() {
+        IconImg({ name: 'plus', iconSize: 21, color: this.textColor })
+      }
+      .width(36)
+      .height(36)
+      .justifyContent(FlexAlign.Center)
+      .onClick(() => {
+        this.openCreateSheet();
+      })
+      Row() {
+        IconImg({ name: 'inbox-arrow-down', iconSize: 21, color: this.textColor })
+      }
+      .width(36)
+      .height(36)
+      .margin({ left: 8 })
+      .justifyContent(FlexAlign.Center)
+      .onClick(() => {
+        AppService.push(ROUTES.IMPORT_SHEET);
+      })
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 8 })
@@ -306,7 +357,7 @@ export struct HomePage {
             .fontSize(15)
             .fontColor(this.textColor)
             .maxLines(1)
-          Text(sheet.platform === '本地' ? I18n.t('home.songCount').replace('{count}', `${sheet.worksNum}`) : sheet.artist)
+          Text(sheet.platform === '本地' ? I18n.tx(this.appLocale, 'home.songCount').replace('{count}', `${sheet.worksNum}`) : sheet.artist)
             .fontSize(12)
             .fontColor(this.textSecondary)
             .margin({ top: 4 })
@@ -323,16 +374,23 @@ export struct HomePage {
           AppService.params.sheet = sheet;
           AppService.push(ROUTES.SHEET_DETAIL);
         } else {
+          AppService.params.sheetKind = sheet.kind.length > 0 ? sheet.kind : 'sheet';
           AppService.params.sheet = sheet;
           AppService.push(ROUTES.PLUGIN_SHEET);
         }
       })
 
       if (sheet.id !== FAVORITE_SHEET_ID) {
-        IconImg({ name: 'trash-outline', iconSize: 18, color: this.textSecondary })
-          .onClick(() => {
-            AppService.sheets.removeSheet(sheet.id);
-          })
+        Row() {
+          IconImg({ name: 'trash-outline', iconSize: 21, color: this.textColor })
+        }
+        .width(36)
+        .height(36)
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          this.deleteTarget = sheet;
+          this.showDelete = true;
+        })
       }
     }
     .width('100%')
@@ -346,99 +404,89 @@ export struct HomePage {
   private selectLocale(locale: string): void {
     I18n.setLocale(locale);
     this.showLanguage = false;
+    this.tick += 1;
   }
 
   @Builder
   drawer() {
     Scroll() {
       Column() {
-        Text('MusicFree')
-          .fontSize(22)
+        Text(APP_NAME)
+          .fontSize(18)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.textColor)
           .width('100%')
-          .padding({ left: 20, right: 20, bottom: 12 })
-          .margin({ top: 12 })
+          .padding({ left: 12, right: 12, bottom: 8 })
+          .margin({ top: 6 })
 
         Column() {
-          Text(I18n.t('common.setting'))
+          Text(I18n.tx(this.appLocale, 'common.setting'))
             .fontSize(13)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.textColor)
             .width('100%')
-            .padding({ left: 16, top: 8, bottom: 4 })
-          this.drawerItem('cog-8-tooth', I18n.t('sidebar.basicSettings'), () => {
+            .padding({ left: 12, top: 8, bottom: 4 })
+          this.drawerItem('cog-8-tooth', I18n.tx(this.appLocale, 'sidebar.basicSettings'), () => {
             AppService.push(ROUTES.BASIC);
           })
-          this.drawerItem('javascript', I18n.t('sidebar.pluginManagement'), () => {
+          this.drawerItem('javascript', I18n.tx(this.appLocale, 'sidebar.pluginManagement'), () => {
             AppService.push(ROUTES.PLUGIN);
           })
-          this.drawerItem('t-shirt-outline', I18n.t('sidebar.themeSettings'), () => {
+          this.drawerItem('t-shirt-outline', I18n.tx(this.appLocale, 'sidebar.themeSettings'), () => {
             AppService.push(ROUTES.THEME);
           })
         }
         .width('100%')
-        .margin({ left: 12, right: 12 })
-        .borderRadius(12)
-        .backgroundColor(this.card)
+        .margin({ bottom: 12 })
 
         Column() {
-          Text(I18n.t('common.other'))
+          Text(I18n.tx(this.appLocale, 'common.other'))
             .fontSize(13)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.textColor)
             .width('100%')
-            .padding({ left: 16, top: 8, bottom: 4 })
+            .padding({ left: 12, top: 8, bottom: 4 })
           this.drawerScheduleItem()
-          this.drawerItem('circle-stack', I18n.t('sidebar.backupAndResume'), () => {
+          this.drawerItem('circle-stack', I18n.tx(this.appLocale, 'sidebar.backupAndResume'), () => {
             AppService.push(ROUTES.BACKUP);
           })
-          this.drawerItem('shield-keyhole-outline', I18n.t('sidebar.permissionManagement'), () => {
+          this.drawerItem('shield-keyhole-outline', I18n.tx(this.appLocale, 'sidebar.permissionManagement'), () => {
             AppService.push(ROUTES.PERMISSIONS);
           })
-          this.drawerItem('language', I18n.t('sidebar.languageSettings'), () => {
+          this.drawerItem('language', I18n.tx(this.appLocale, 'sidebar.languageSettings'), () => {
             this.pickLanguage();
-          }, I18n.localeLabel(this.appLocale), false)
-          this.drawerItem('arrow-down-tray', I18n.t('downloading.title'), () => {
-            AppService.push(ROUTES.DOWNLOADING);
-          })
+          }, I18n.localeLabel(this.appLocale))
         }
         .width('100%')
-        .margin({ left: 12, right: 12, top: 12 })
-        .borderRadius(12)
-        .backgroundColor(this.card)
+        .margin({ bottom: 12 })
 
         Column() {
-          Text(I18n.t('common.software'))
+          Text(I18n.tx(this.appLocale, 'common.software'))
             .fontSize(13)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.textColor)
             .width('100%')
-            .padding({ left: 16, top: 8, bottom: 4 })
-          this.drawerItem('arrow-path', I18n.t('sidebar.checkUpdate'), () => {
+            .padding({ left: 12, top: 8, bottom: 4 })
+          this.drawerItem('arrow-path', I18n.tx(this.appLocale, 'sidebar.checkUpdate'), () => {
             UpdateService.showResult(true);
-          }, `${I18n.t('sidebar.currentVersion')}${APP_VERSION}`)
-          this.drawerItem('information-circle', I18n.t('about.title'), () => {
+          }, `${I18n.tx(this.appLocale, 'sidebar.currentVersion')}${APP_VERSION}`)
+          this.drawerItem('information-circle', `${I18n.tx(this.appLocale, 'common.about')} ${APP_NAME}`, () => {
             AppService.push(ROUTES.ABOUT);
           })
         }
         .width('100%')
-        .margin({ left: 12, right: 12, top: 12 })
-        .borderRadius(12)
-        .backgroundColor(this.card)
 
         Column()
           .width('100%')
           .height(1)
-          .margin({ top: 16, bottom: 8, left: 20, right: 20 })
+          .margin({ top: 16, bottom: 8, left: 12, right: 12 })
           .backgroundColor(this.divider)
 
-        this.drawerItem('home-outline', I18n.t('sidebar.backToDesktop'), () => {
-          AppService.context?.moveAbilityToBackground();
+        this.drawerItem('home-outline', I18n.tx(this.appLocale, 'sidebar.backToDesktop'), () => {
+          AppService.goBackground();
         })
-        this.drawerItem('power-outline', I18n.t('sidebar.exitApp'), () => {
-          AppService.player.reset();
-          AppService.context?.terminateSelf();
+        this.drawerItem('power-outline', I18n.tx(this.appLocale, 'sidebar.exitApp'), () => {
+          AppService.exitApp();
         })
       }
       .width('100%')
@@ -453,96 +501,92 @@ export struct HomePage {
   }
 
   @Builder
-  drawerItem(icon: string, title: string, action: () => void, rightText: string = '', closeDrawer: boolean = true) {
+  drawerItem(icon: string, title: string, action: () => void, rightText: string = '') {
     Row() {
-      IconImg({ name: icon, iconSize: 20, color: this.textColor })
+      IconImg({ name: icon, iconSize: 21, color: this.textColor })
       Text(title)
         .fontSize(15)
         .fontColor(this.textColor)
-        .margin({ left: 14 })
+        .margin({ left: 12 })
         .layoutWeight(1)
       if (rightText.length > 0) {
         Text(rightText)
-          .fontSize(12)
+          .fontSize(13)
           .fontColor(this.textColor)
       }
     }
     .width('100%')
-    .height(48)
-    .padding({ left: 20, right: 20 })
+    .height(54)
+    .padding({ left: 12, right: 12 })
     .onClick(() => {
-      if (closeDrawer) {
-        this.showDrawer = false;
-      }
-      action();
+      this.runDrawerAction(action);
     })
   }
 
   @Builder
   drawerScheduleItem() {
     Row() {
-      IconImg({ name: 'alarm-outline', iconSize: 20, color: this.textColor })
-      Text(I18n.t('sidebar.scheduleClose'))
+      IconImg({ name: 'alarm-outline', iconSize: 21, color: this.textColor })
+      Text(I18n.tx(this.appLocale, 'sidebar.scheduleClose'))
         .fontSize(15)
         .fontColor(this.textColor)
-        .margin({ left: 14 })
+        .margin({ left: 12 })
         .layoutWeight(1)
       if (this.scheduleRemain.length > 0) {
         Text(this.scheduleRemain)
-          .fontSize(12)
+          .fontSize(13)
           .fontColor(this.textColor)
       }
     }
     .width('100%')
-    .height(48)
-    .padding({ left: 20, right: 20 })
+    .height(54)
+    .padding({ left: 12, right: 12 })
     .onClick(() => {
-      this.showDrawer = false;
-      this.exitOnClose = ScheduleClose.exitApp;
-      this.showSchedule = true;
+      this.runDrawerAction(() => {
+        this.showSchedule = true;
+      });
     })
   }
 
   @Builder
-  panelActionHeader(title: string, onCancel: () => void, onConfirm: () => void) {
+  panelActionHeader(title: string, onCancel: () => void, onConfirm: () => void, hideButtons: boolean) {
     Row() {
-      Text(I18n.t('common.cancel'))
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.textColor)
-        .width(72)
-        .onClick(onCancel)
-      Text(title)
-        .fontSize(16)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.textColor)
-        .layoutWeight(1)
-        .textAlign(TextAlign.Center)
-        .maxLines(1)
-      Text(I18n.t('common.confirm'))
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.primary)
-        .width(72)
-        .textAlign(TextAlign.End)
-        .onClick(onConfirm)
+      if (hideButtons) {
+        Text(title)
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .maxLines(1)
+      } else {
+        Text(I18n.tx(this.appLocale, 'common.cancel'))
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.textColor)
+          .width(60)
+          .onClick(onCancel)
+        Text(title)
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+          .maxLines(1)
+        Text(I18n.tx(this.appLocale, 'common.confirm'))
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.primary)
+          .width(60)
+          .textAlign(TextAlign.End)
+          .onClick(onConfirm)
+      }
     }
     .width('100%')
-    .height(48)
-    .padding({ left: 16, right: 16 })
+    .height(50)
+    .padding({ left: 12, right: 12 })
     .alignItems(VerticalAlign.Center)
-  }
-
-  @Builder
-  panelTitle(title: string) {
-    Text(title)
-      .fontSize(16)
-      .fontWeight(FontWeight.Bold)
-      .fontColor(this.textColor)
-      .width('100%')
-      .textAlign(TextAlign.Center)
-      .maxLines(1)
-      .padding({ left: 16, right: 16, top: 12, bottom: 8 })
+    .border({ width: { bottom: 1 }, color: this.divider })
   }
 
   @Builder
@@ -556,7 +600,7 @@ export struct HomePage {
           this.showLanguage = false;
         })
       Column() {
-        Text(I18n.t('sidebar.languageSettings'))
+        Text(I18n.tx(this.appLocale, 'sidebar.languageSettings'))
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.textColor)
@@ -573,6 +617,7 @@ export struct HomePage {
     }
     .width('100%')
     .height('100%')
+    .zIndex(20)
   }
 
   @Builder
@@ -594,175 +639,133 @@ export struct HomePage {
     })
   }
 
+  private confirmDeleteSheet(): void {
+    const sheet = this.deleteTarget;
+    this.showDelete = false;
+    const local = sheet.platform === LOCAL_PLATFORM || sheet.platform.length === 0;
+    if (local) {
+      AppService.sheets.removeSheet(sheet.id);
+    } else {
+      AppService.sheets.unstarSheet(sheet);
+    }
+    promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.deleteSuccess'), duration: 1500 });
+  }
+
   @Builder
-  createBuilder() {
-    Column() {
-      this.panelActionHeader(I18n.t('panel.createMusicSheet.title'), () => {
-        this.showCreate = false;
-      }, () => {
-        if (this.newSheetName.trim().length === 0) {
-          return;
-        }
-        AppService.sheets.addSheet(this.newSheetName.trim());
-        this.showCreate = false;
-      })
-      TextInput({ placeholder: I18n.t('home.sheetNamePlaceholder'), text: this.newSheetName })
-        .fontColor(this.textColor)
-        .placeholderColor(this.textSecondary)
-        .backgroundColor(this.placeholder)
-        .caretColor(this.primary)
-        .onChange((v: string) => {
-          this.newSheetName = v;
-        })
-        .margin({ left: 16, right: 16, top: 12 })
-      Button(I18n.t('common.create'))
-        .width('90%')
-        .margin({ top: 16 })
-        .backgroundColor(this.primary)
-        .fontColor('#FEFEFE')
+  deleteOverlay() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.maskColor)
         .onClick(() => {
-          if (this.newSheetName.trim().length === 0) {
-            return;
-          }
-          AppService.sheets.addSheet(this.newSheetName.trim());
+          this.showDelete = false;
+        })
+      Column() {
+        Text(I18n.tx(this.appLocale, 'dialog.deleteSheetTitle'))
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+          .width('100%')
+          .padding({ left: 20, right: 20, top: 20, bottom: 8 })
+        Text(I18n.tx(this.appLocale, 'dialog.deleteSheetContent').replace('{name}', this.deleteTarget.title))
+          .fontSize(14)
+          .fontColor(this.textColor)
+          .width('100%')
+          .padding({ left: 20, right: 20, bottom: 16 })
+        Row() {
+          Text(I18n.tx(this.appLocale, 'common.cancel'))
+            .fontSize(15)
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+            .textAlign(TextAlign.Center)
+            .padding({ top: 12, bottom: 12 })
+            .onClick(() => {
+              this.showDelete = false;
+            })
+          Text(I18n.tx(this.appLocale, 'common.confirm'))
+            .fontSize(15)
+            .fontColor(this.primary)
+            .layoutWeight(1)
+            .textAlign(TextAlign.Center)
+            .padding({ top: 12, bottom: 12 })
+            .onClick(() => {
+              this.confirmDeleteSheet();
+            })
+        }
+        .width('100%')
+      }
+      .width('80%')
+      .borderRadius(12)
+      .backgroundColor(this.backdrop)
+    }
+    .width('100%')
+    .height('100%')
+    .zIndex(20)
+  }
+
+  @Builder
+  createOverlay() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.maskColor)
+        .onClick(() => {
           this.showCreate = false;
         })
-    }
-    .width('100%')
-    .backgroundColor(this.backdrop)
-  }
-
-  @Builder
-  importBuilder() {
-    Column() {
-      this.panelActionHeader(I18n.t('panel.importMusicSheet.title'), () => {
-        this.showImport = false;
-      }, () => {
-        this.doImport();
-      })
-      Text(I18n.t('home.importHint'))
-        .fontSize(12)
-        .fontColor(this.textColor)
-        .margin({ left: 16, right: 16, top: 8 })
-      TextInput({ placeholder: I18n.t('panel.importMusicSheet.placeholder'), text: this.importUrl })
-        .fontColor(this.textColor)
-        .placeholderColor(this.textSecondary)
-        .backgroundColor(this.placeholder)
-        .caretColor(this.primary)
-        .onChange((v: string) => {
-          this.importUrl = v;
-        })
-        .margin({ left: 16, right: 16, top: 12 })
-      Button(this.importing ? I18n.t('panel.importMusicSheet.importing') : I18n.t('common.import'))
-        .width('90%')
-        .margin({ top: 16 })
-        .backgroundColor(this.primary)
-        .fontColor('#FEFEFE')
-        .enabled(!this.importing)
-        .onClick(() => {
-          this.doImport();
-        })
-    }
-    .width('100%')
-    .backgroundColor(this.backdrop)
-  }
-
-  async doImport(): Promise<void> {
-    if (this.importUrl.trim().length === 0 || this.importing) {
-      return;
-    }
-    this.importing = true;
-    try {
-      const count = await AppService.importSheetByUrl(this.importUrl);
-      if (count === 0) {
-        promptAction.showToast({ message: I18n.t('panel.importMusicSheet.invalidLink'), duration: 2500 });
-      } else {
-        promptAction.showToast({ message: I18n.t('home.importedCount').replace('{count}', `${count}`), duration: 2000 });
-        this.showImport = false;
-        this.importUrl = '';
+      Column() {
+        this.panelActionHeader(I18n.tx(this.appLocale, 'panel.createMusicSheet.title'), () => {
+          this.showCreate = false;
+        }, () => {
+          this.confirmCreateSheet();
+        }, false)
+        TextInput({ placeholder: I18n.tx(this.appLocale, 'panel.createMusicSheet.title'), text: this.newSheetName })
+          .fontColor(this.textColor)
+          .placeholderColor(this.textSecondary)
+          .backgroundColor(this.placeholder)
+          .caretColor(this.primary)
+          .maxLength(200)
+          .defaultFocus(true)
+          .onChange((v: string) => {
+            this.newSheetName = v;
+          })
+          .margin({ left: 12, right: 12, top: 12, bottom: 16 })
       }
-    } catch (e) {
-      promptAction.showToast({ message: e instanceof Error ? e.message : I18n.t('home.importFail'), duration: 2500 });
+      .width('100%')
+      .padding({ bottom: 12 + this.gestureBarHeight })
+      .backgroundColor(this.backdrop)
+      .borderRadius({ topLeft: 12, topRight: 12 })
     }
-    this.importing = false;
+    .width('100%')
+    .height('100%')
+    .zIndex(20)
   }
 
   @Builder
-  scheduleBuilder() {
-    Column() {
-      this.panelTitle(this.scheduleRemain.length > 0 ?
-        `${I18n.t('sidebar.scheduleClose')}  ${this.scheduleRemain}` :
-        I18n.t('sidebar.scheduleClose'))
-      Text(this.scheduleRemain.length > 0 ? I18n.t('panel.timingClose.remain').replace('{time}', this.scheduleRemain) : I18n.t('panel.timingClose.pickTime'))
-        .fontSize(14)
-        .fontColor(this.textColor)
-        .margin({ top: 8, bottom: 12 })
-      Row() {
-        this.timeChip(I18n.t('panel.timingClose.min15'), () => {
-          ScheduleClose.setMinutes(15);
+  scheduleOverlay() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.maskColor)
+        .onClick(() => {
+          this.showSchedule = false;
         })
-        this.timeChip(I18n.t('panel.timingClose.min30'), () => {
-          ScheduleClose.setMinutes(30);
-        })
-        this.timeChip(I18n.t('panel.timingClose.min45'), () => {
-          ScheduleClose.setMinutes(45);
-        })
-        this.timeChip(I18n.t('panel.timingClose.min60'), () => {
-          ScheduleClose.setMinutes(60);
+      Column() {
+        ScheduleClosePanel({
+          onDismiss: () => {
+            this.showSchedule = false;
+          }
         })
       }
       .width('100%')
-      .padding({ left: 12, right: 12 })
-      .justifyContent(FlexAlign.SpaceBetween)
-
-      Button(I18n.t('panel.timingClose.closeAfterPlay'))
-        .width('90%')
-        .margin({ top: 16 })
-        .backgroundColor(this.placeholder)
-        .fontColor(this.textColor)
-        .onClick(() => {
-          ScheduleClose.setAfterCurrent();
-        })
-
-      Row() {
-        Toggle({ type: ToggleType.Switch, isOn: this.exitOnClose })
-          .selectedColor(this.primary)
-          .onChange((on: boolean) => {
-            this.exitOnClose = on;
-            ScheduleClose.exitApp = on;
-          })
-        Text(I18n.t('panel.timingClose.exitApp'))
-          .fontSize(14)
-          .fontColor(this.textColor)
-          .margin({ left: 10 })
-      }
-      .width('90%')
-      .margin({ top: 16 })
-      .justifyContent(FlexAlign.Start)
-
-      if (this.scheduleRemain.length > 0) {
-        Button(I18n.t('panel.timingClose.cancelScheduleClose'))
-          .width('90%')
-          .margin({ top: 16 })
-          .backgroundColor(this.danger)
-          .fontColor('#FEFEFE')
-          .onClick(() => {
-            ScheduleClose.cancel();
-          })
-      }
+      .padding({ bottom: this.gestureBarHeight })
+      .backgroundColor(this.backdrop)
+      .borderRadius({ topLeft: 12, topRight: 12 })
     }
     .width('100%')
-    .backgroundColor(this.backdrop)
-  }
-
-  @Builder
-  timeChip(label: string, action: () => void) {
-    Text(label)
-      .fontSize(13)
-      .fontColor(this.textColor)
-      .padding({ left: 10, right: 10, top: 10, bottom: 10 })
-      .borderRadius(8)
-      .backgroundColor(this.placeholder)
-      .onClick(action)
+    .height('100%')
+    .zIndex(20)
   }
 }

@@ -45,13 +45,13 @@ export struct SearchMusicListPage {
   build() {
     Column() {
       AppNavBar({
-        title: this.title.length > 0 ? this.title : I18n.t('searchMusicList.title'),
+        title: this.title.length > 0 ? this.title : I18n.tx(this.appLocale, 'searchMusicList.title'),
         onBack: () => {
           AppService.pop();
         }
       })
       Row() {
-        TextInput({ placeholder: I18n.t('searchMusicList.placeholder'), text: this.query })
+        TextInput({ placeholder: I18n.tx(this.appLocale, 'searchMusicList.placeholder'), text: this.query })
           .layoutWeight(1)
           .height(40)
           .backgroundColor(this.placeholder)
@@ -66,7 +66,7 @@ export struct SearchMusicListPage {
       .padding({ left: 16, right: 16, bottom: 8 })
 
       if (this.filtered.length === 0) {
-        EmptyView({ text: I18n.t('searchMusicList.noMatch') })
+        EmptyView({ text: I18n.tx(this.appLocale, 'searchMusicList.noMatch') })
       } else {
         List() {
           ForEach(this.filtered, (item: MusicItem, index: number) => {

@@ -9,6 +9,11 @@ export struct AppNavBar {
   @StorageLink('textColor') textColor: string = '#FCFCFC';
   @StorageLink('backdrop') backdrop: string = '#303030';
   @StorageLink('statusBarHeight') statusBarHeight: number = 44;
+  @StorageLink('themeRev') @Watch('onThemeRev') themeRev: number = 0;
+  @StorageLink('localeRev') @Watch('onLocaleRev') localeRev: number = 0;
+  @StorageLink('appLocale') appLocale: string = 'zh-CN';
+  @State paintRev: number = 0;
+  @Prop stamp: number = 0;
   @Prop title: string = '';
   @Prop showBack: boolean = true;
   @Prop menuTitles: string[] = [];
@@ -20,6 +25,30 @@ export struct AppNavBar {
 
   aboutToAppear(): void {
     AppService.theme.setAppBarStatusIcons(true);
+  }
+
+  onThemeRev(): void {
+    this.paintRev = this.paintRev + 1;
+  }
+
+  onLocaleRev(): void {
+    this.paintRev = this.paintRev + 1;
+  }
+
+  private barBg(): string {
+    const raw = AppStorage.get<string>('appBar');
+    if (this.paintRev >= 0 && this.stamp >= 0 && raw !== undefined && raw !== null && `${raw}`.trim().length > 0) {
+      return `${raw}`;
+    }
+    return this.appBar;
+  }
+
+  private barText(): string {
+    const raw = AppStorage.get<string>('appBarText');
+    if (this.paintRev >= 0 && this.stamp >= 0 && raw !== undefined && raw !== null && `${raw}`.trim().length > 0) {
+      return `${raw}`;
+    }
+    return this.appBarText;
   }
 
   aboutToDisappear(): void {
@@ -37,7 +66,7 @@ export struct AppNavBar {
     Row() {
       if (this.showBack) {
         Row() {
-          IconImg({ name: 'arrow-left', iconSize: 22, color: this.appBarText })
+          IconImg({ name: 'arrow-left', iconSize: 22, color: this.barText() })
         }
         .width(40)
         .height(40)
@@ -46,17 +75,17 @@ export struct AppNavBar {
           this.onBack();
         })
       }
-      Text(this.title)
+      Text(`${this.title}${this.appLocale.length >= 0 && this.localeRev >= 0 ? '' : ''}`)
         .fontSize(18)
         .fontWeight(FontWeight.Medium)
-        .fontColor(this.appBarText)
+        .fontColor(this.barText())
         .layoutWeight(1)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
       this.rightSlot()
       if (this.menuTitles.length > 0) {
         Row() {
-          IconImg({ name: 'ellipsis-vertical', iconSize: 22, color: this.appBarText })
+          IconImg({ name: 'ellipsis-vertical', iconSize: 22, color: this.barText() })
         }
         .width(40)
         .height(40)
@@ -72,7 +101,8 @@ export struct AppNavBar {
     .height(48 + this.statusBarHeight)
     .padding({ left: 8, right: 12, top: this.statusBarHeight })
     .alignItems(VerticalAlign.Center)
-    .backgroundColor(this.appBar)
+    .backgroundColor(this.barBg())
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
   }
 
   @Builder

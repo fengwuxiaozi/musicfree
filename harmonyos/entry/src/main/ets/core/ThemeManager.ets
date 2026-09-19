@@ -23,6 +23,10 @@ export class ThemeManager {
   }
 
   apply(dark: boolean): void {
+    this.applyInner(dark);
+  }
+
+  private applyInner(dark: boolean): void {
     this.isDark = dark;
     AppStorage.setOrCreate(STORE_KEYS.themeDark, dark);
     if (this.selectedTheme !== 'custom') {
@@ -34,6 +38,7 @@ export class ThemeManager {
       AppStorage.setOrCreate(STORE_KEYS.pageBackground, '#202020');
       AppStorage.setOrCreate(STORE_KEYS.textColor, '#FCFCFC');
       AppStorage.setOrCreate(STORE_KEYS.textSecondary, '#B3FCFCFC');
+      AppStorage.setOrCreate(STORE_KEYS.textHint, '#99FCFCFC');
       AppStorage.setOrCreate(STORE_KEYS.appBar, '#262626');
       AppStorage.setOrCreate(STORE_KEYS.appBarText, '#FCFCFC');
       AppStorage.setOrCreate(STORE_KEYS.musicBar, '#262626');
@@ -50,8 +55,9 @@ export class ThemeManager {
       AppStorage.setOrCreate(STORE_KEYS.pageBackground, '#FAFAFA');
       AppStorage.setOrCreate(STORE_KEYS.textColor, '#333333');
       AppStorage.setOrCreate(STORE_KEYS.textSecondary, '#B3333333');
-      AppStorage.setOrCreate(STORE_KEYS.appBar, '#F17D34');
-      AppStorage.setOrCreate(STORE_KEYS.appBarText, '#FEFEFE');
+      AppStorage.setOrCreate(STORE_KEYS.textHint, '#99333333');
+      AppStorage.setOrCreate(STORE_KEYS.appBar, '#FFFFFF');
+      AppStorage.setOrCreate(STORE_KEYS.appBarText, '#333333');
       AppStorage.setOrCreate(STORE_KEYS.musicBar, '#F2F2F2');
       AppStorage.setOrCreate(STORE_KEYS.musicBarText, '#333333');
       AppStorage.setOrCreate(STORE_KEYS.card, '#88E2E2E2');
@@ -62,37 +68,76 @@ export class ThemeManager {
       AppStorage.setOrCreate(STORE_KEYS.tabBar, '#F0F0F0');
       AppStorage.setOrCreate(STORE_KEYS.danger, '#FC5F5F');
     }
-    this.updateStatusBar(dark);
+    this.bumpThemeRev();
+    this.syncSystemBars(true);
   }
 
   setAppBarStatusIcons(onAppBar: boolean): void {
+    this.syncSystemBars(onAppBar);
+  }
+
+  private storageColor(key: string, fallback: string): string {
+    const raw = AppStorage.get<string>(key);
+    if (raw === undefined || raw === null) {
+      return fallback;
+    }
+    const text = `${raw}`.trim();
+    if (text.length === 0) {
+      return fallback;
+    }
+    return text;
+  }
+
+  private toArgb(color: string): string {
+    const text = color.trim();
+    if (text.length === 7 && text.startsWith('#')) {
+      return `#FF${text.substring(1)}`;
+    }
+    if (text.length === 9 && text.startsWith('#')) {
+      if (text.substring(1, 3).toUpperCase() === '00') {
+        return `#FF${text.substring(3)}`;
+      }
+      return text;
+    }
+    return text;
+  }
+
+  private syncSystemBars(onAppBar: boolean): void {
     const win = AppService.mainWindow;
     if (win === null) {
       return;
     }
+    const pageBg = this.storageColor(STORE_KEYS.pageBackground, this.isDark ? '#202020' : '#FAFAFA');
+    const appBar = this.storageColor(STORE_KEYS.appBar, this.isDark ? '#262626' : '#FFFFFF');
+    const appBarText = this.storageColor(STORE_KEYS.appBarText, this.isDark ? '#FCFCFC' : '#333333');
+    const barBg = onAppBar ? appBar : pageBg;
+    const barText = onAppBar ? appBarText : (this.isDark ? '#FCFCFC' : '#333333');
+    try {
+      win.setWindowBackgroundColor(this.toArgb(pageBg));
+    } catch (_bg) {
+    }
     try {
       const sysBar: window.SystemBarProperties = {
-        statusBarColor: '#00000000',
-        statusBarContentColor: onAppBar || this.isDark ? '#FCFCFC' : '#333333'
+        statusBarColor: this.toArgb(barBg),
+        statusBarContentColor: this.toArgb(barText),
+        isStatusBarLightIcon: this.isDark,
+        navigationBarColor: this.toArgb(pageBg)
       };
       win.setWindowSystemBarProperties(sysBar);
     } catch (_e) {
     }
   }
 
-  private updateStatusBar(dark: boolean): void {
-    const win = AppService.mainWindow;
-    if (win === null) {
-      return;
+  private bumpThemeRev(): void {
+    const raw = AppStorage.get<number>(STORE_KEYS.themeRev);
+    let next = 1;
+    if (raw !== undefined && raw !== null) {
+      next = Number(`${raw}`) + 1;
+      if (Number.isNaN(next)) {
+        next = 1;
+      }
     }
-    try {
-      const sysBar: window.SystemBarProperties = {
-        statusBarColor: '#00000000',
-        statusBarContentColor: dark ? '#FCFCFC' : '#333333'
-      };
-      win.setWindowSystemBarProperties(sysBar);
-    } catch (_e) {
-    }
+    AppStorage.setOrCreate(STORE_KEYS.themeRev, next);
   }
 
   async load(): Promise<void> {
@@ -102,9 +147,9 @@ export class ThemeManager {
     AppStorage.setOrCreate('themeFollowSystem', this.followSystem);
     AppStorage.setOrCreate('themeSelected', this.selectedTheme);
     if (this.followSystem) {
-      this.apply(this.isSystemDark());
+      this.applyInner(this.isSystemDark());
     } else {
-      this.apply(mode !== 'p-light');
+      this.applyInner(mode !== 'p-light');
     }
     this.bgUrl = await AppStorageUtil.getString('theme.background', '');
     const blurRaw = await AppStorageUtil.getString('theme.backgroundBlur', '20');
@@ -116,28 +161,43 @@ export class ThemeManager {
     this.syncBg();
   }
 
-  async setFollowSystem(on: boolean): Promise<void> {
+  private persistTheme(): void {
+    this.saveTheme();
+  }
+
+  private async saveTheme(): Promise<void> {
+    await AppStorageUtil.setBool('theme.followSystem', this.followSystem);
+    await AppStorageUtil.setString('theme.selectedTheme', this.selectedTheme);
+  }
+
+  setFollowSystem(on: boolean): void {
     this.followSystem = on;
-    await AppStorageUtil.setBool('theme.followSystem', on);
     AppStorage.setOrCreate('themeFollowSystem', on);
     if (on) {
-      this.apply(this.isSystemDark());
-      await AppStorageUtil.setString('theme.selectedTheme', this.selectedTheme);
+      this.applyInner(this.isSystemDark());
+    } else {
+      this.bumpThemeRev();
     }
+    this.persistTheme();
   }
 
-  async setDark(dark: boolean): Promise<void> {
+  setDark(dark: boolean): void {
+    this.followSystem = false;
     this.selectedTheme = dark ? 'p-dark' : 'p-light';
-    await AppStorageUtil.setString('theme.selectedTheme', this.selectedTheme);
+    AppStorage.setOrCreate('themeFollowSystem', false);
     AppStorage.setOrCreate('themeSelected', this.selectedTheme);
-    this.apply(dark);
+    this.applyInner(dark);
     this.syncBg();
+    this.persistTheme();
   }
 
-  async selectCustom(): Promise<void> {
+  selectCustom(): void {
+    this.followSystem = false;
     this.selectedTheme = 'custom';
-    await AppStorageUtil.setString('theme.selectedTheme', 'custom');
+    AppStorage.setOrCreate('themeFollowSystem', false);
     AppStorage.setOrCreate('themeSelected', 'custom');
+    this.bumpThemeRev();
+    this.persistTheme();
   }
 
   syncBg(): void {
@@ -217,6 +277,7 @@ export function initAppStorageDefaults(): void {
   AppStorage.setOrCreate(STORE_KEYS.pageBackground, '#202020');
   AppStorage.setOrCreate(STORE_KEYS.textColor, '#FCFCFC');
   AppStorage.setOrCreate(STORE_KEYS.textSecondary, '#B3FCFCFC');
+  AppStorage.setOrCreate(STORE_KEYS.textHint, '#99FCFCFC');
   AppStorage.setOrCreate(STORE_KEYS.appBar, '#262626');
   AppStorage.setOrCreate(STORE_KEYS.appBarText, '#FCFCFC');
   AppStorage.setOrCreate(STORE_KEYS.musicBar, '#262626');
@@ -233,10 +294,17 @@ export function initAppStorageDefaults(): void {
   AppStorage.setOrCreate(STORE_KEYS.bgUrl, '');
   AppStorage.setOrCreate(STORE_KEYS.bgBlur, 20);
   AppStorage.setOrCreate(STORE_KEYS.bgOpacity, 0.6);
+  AppStorage.setOrCreate(STORE_KEYS.themeRev, 0);
   AppStorage.setOrCreate('floatingLyricOn', false);
   AppStorage.setOrCreate('floatingLyricText', I18n.t('lyric.noLyric'));
   AppStorage.setOrCreate('floatingLyricInApp', true);
   AppStorage.setOrCreate('scheduleRemain', '');
   AppStorage.setOrCreate('statusBarHeight', 44);
   AppStorage.setOrCreate('gestureBarHeight', 16);
+  AppStorage.setOrCreate('localMusicTick', 0);
+  AppStorage.setOrCreate('lyricTick', 0);
+  AppStorage.setOrCreate('lyricLoading', false);
+  AppStorage.setOrCreate('musicDetailShowTick', 0);
+  AppStorage.setOrCreate('playQuality', 'standard');
+  AppStorage.setOrCreate('playRate', 100);
 }

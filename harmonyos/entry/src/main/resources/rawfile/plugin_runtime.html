@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>MusicFree Plugin Runtime</title>
+</head>
+<body>
+<script>
+(function () {
+  function waToBytes(wa) {
+    var bytes = [], i, bite;
+    if (!wa) return bytes;
+    for (i = 0; i < wa.sigBytes; i++) {
+      bite = (wa.words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+      bytes.push(bite);
+    }
+    return bytes;
+  }
+  function bytesToWa(bytes) {
+    var words = [], i;
+    bytes = bytes || [];
+    for (i = 0; i < bytes.length; i++) {
+      words[i >>> 2] |= (bytes[i] & 0xff) << (24 - (i % 4) * 8);
+    }
+    return new WordArray(words, bytes.length);
+  }
+  function bytesToBin(bytes) {
+    var s = '', i;
+    for (i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i] & 0xff);
+    return s;
+  }
+
+  function WordArray(words, sigBytes) {
+    this.words = words || [];
+    this.sigBytes = sigBytes != null ? sigBytes : this.words.length * 4;
+  }
+  WordArray.prototype.toString = function (encoder) {
+    encoder = encoder || CryptoJS.enc.Hex;
+    return encoder.stringify(this);
+  };
+  WordArray.prototype.clone = function () {
+    return new WordArray(this.words.slice(), this.sigBytes);
+  };
+  WordArray.prototype.clamp = function () {
+    var words = this.words, sigBytes = this.sigBytes;
+    words[sigBytes >>> 2] &= 0xffffffff << (32 - (sigBytes % 4) * 8);
+    words.length = Math.ceil(sigBytes / 4);
+    return this;
+  };
+  WordArray.prototype.concat = function (other) {
+    var bytes = waToBytes(this).concat(waToBytes(other));
+    var next = bytesToWa(bytes);
+    this.words = next.words;
+    this.sigBytes = next.sigBytes;
+    return this;
+  };
+  WordArray.create = function (words, sigBytes) {
+    return new WordArray(words, sigBytes);
+  };
+  WordArray.random = function (nBytes) {
+    var bytes = [], i, buf;
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      buf = new Uint8Array(nBytes);
+      crypto.getRandomValues(buf);
+      for (i = 0; i < nBytes; i++) bytes.push(buf[i]);
+    } else {
+      for (i = 0; i < nBytes; i++) bytes.push(Math.floor(Math.random() * 256));
+    }
+    return bytesToWa(bytes);
+  };
+
+  function latin1Parse(str) {
+    str = str == null ? '' : String(str);
+    var words = [], i;
+    for (i = 0; i < str.length; i++) {
+      words[i >>> 2] |= (str.charCodeAt(i) & 0xff) << (24 - (i % 4) * 8);
+    }
+    return new WordArray(words, str.length);
+  }
+  function latin1Stringify(wa) {
+    return bytesToBin(waToBytes(wa));
+  }
+  function utf8Parse(str) {
+    return latin1Parse(unescape(encodeURIComponent(str == null ? '' : String(str))));
+  }
+  function utf8Stringify(wa) {
+    var str = latin1Stringify(wa);
+    try { return decodeURIComponent(escape(str)); } catch (e) { return str; }
+  }
+  function hexStringify(wa) {
+    var hexChars = [], i, bite;
+    for (i = 0; i < wa.sigBytes; i++) {
+      bite = (wa.words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+      hexChars.push((bite >>> 4).toString(16));
+      hexChars.push((bite & 0x0f).toString(16));
+    }
+    return hexChars.join('');
+  }
+  function hexParse(hex) {
+    hex = String(hex || '').replace(/\s+/g, '');
+    var words = [], i, n = hex.length;
+    for (i = 0; i < n; i += 2) {
+      words[i >>> 3] |= parseInt(hex.substr(i, 2), 16) << (24 - (i % 8) * 4);
+    }
+    return new WordArray(words, n / 2);
+  }
+  var B64MAP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  function base64Stringify(wa) {
+    var map = B64MAP, base64Chars = [], trip, byte1, byte2, byte3, i;
+    for (i = 0; i < wa.sigBytes; i += 3) {
+      byte1 = (wa.words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+      byte2 = (wa.words[(i + 1) >>> 2] >>> (24 - ((i + 1) % 4) * 8)) & 0xff;
+      byte3 = (wa.words[(i + 2) >>> 2] >>> (24 - ((i + 2) % 4) * 8)) & 0xff;
+      trip = (byte1 << 16) | (byte2 << 8) | byte3;
+      base64Chars.push(map.charAt((trip >>> 18) & 0x3f));
+      base64Chars.push(map.charAt((trip >>> 12) & 0x3f));
+      base64Chars.push(i + 1 < wa.sigBytes ? map.charAt((trip >>> 6) & 0x3f) : '=');
+      base64Chars.push(i + 2 < wa.sigBytes ? map.charAt(trip & 0x3f) : '=');
+    }
+    return base64Chars.join('');
+  }
+  function base64Parse(input) {
+    var map = B64MAP + '-_';
+    input = String(input || '').replace(/[\s=]/g, '').replace(/-/g, '+').replace(/_/g, '/');
+    var bytes = [], buf = 0, bits = 0, i, v;
+    for (i = 0; i < input.length; i++) {
+      v = B64MAP.indexOf(input.charAt(i));
+      if (v < 0) continue;
+      buf = (buf << 6) | v;
+      bits += 6;
+      if (bits >= 8) {
+        bits -= 8;
+        bytes.push((buf >>> bits) & 0xff);
+      }
+    }
+    return bytesToWa(bytes);
+  }
+
+  function toWordArray(input) {
+    if (input == null) return new WordArray([], 0);
+    if (input.words && input.sigBytes != null) return input;
+    return utf8Parse(String(input));
+  }
+
+  var MD5_S = [
+    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+    5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+    4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+    6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+  ];
+  var MD5_K = [];
+  (function initMd5K() {
+    var i;
+    for (i = 0; i < 64; i++) MD5_K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) >>> 0;
+  })();
+  function md5Bytes(bytes) {
+    var origLen = bytes.length, msg = bytes.slice(), low, high, i, off;
+    var a0 = 0x67452301, b0 = 0xEFCDAB89, c0 = 0x98BADCFE, d0 = 0x10325476;
+    var A, B, C, D, F, g, M, tmp;
+    msg.push(0x80);
+    while ((msg.length % 64) !== 56) msg.push(0);
+    low = (origLen * 8) >>> 0;
+    high = Math.floor(origLen / 0x20000000);
+    msg.push(low & 0xff, (low >>> 8) & 0xff, (low >>> 16) & 0xff, (low >>> 24) & 0xff);
+    msg.push(high & 0xff, (high >>> 8) & 0xff, (high >>> 16) & 0xff, (high >>> 24) & 0xff);
+    for (off = 0; off < msg.length; off += 64) {
+      M = [];
+      for (i = 0; i < 16; i++) {
+        M[i] = msg[off + i * 4] | (msg[off + i * 4 + 1] << 8) | (msg[off + i * 4 + 2] << 16) | (msg[off + i * 4 + 3] << 24);
+      }
+      A = a0; B = b0; C = c0; D = d0;
+      for (i = 0; i < 64; i++) {
+        if (i < 16) { F = (B & C) | ((~B) & D); g = i; }
+        else if (i < 32) { F = (D & B) | ((~D) & C); g = (5 * i + 1) % 16; }
+        else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) % 16; }
+        else { F = C ^ (B | (~D)); g = (7 * i) % 16; }
+        tmp = D;
+        D = C;
+        C = B;
+        F = (F + A + MD5_K[i] + M[g]) | 0;
+        B = (B + ((F << MD5_S[i]) | (F >>> (32 - MD5_S[i])))) | 0;
+        A = tmp;
+      }
+      a0 = (a0 + A) | 0; b0 = (b0 + B) | 0; c0 = (c0 + C) | 0; d0 = (d0 + D) | 0;
+    }
+    function le(n) { return [n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]; }
+    return le(a0).concat(le(b0), le(c0), le(d0));
+  }
+
+  function appendBitLenBE(msg, ml) {
+    var high = Math.floor(ml / 0x20000000), low = (ml << 3) >>> 0;
+    msg.push((high >>> 24) & 0xff, (high >>> 16) & 0xff, (high >>> 8) & 0xff, high & 0xff);
+    msg.push((low >>> 24) & 0xff, (low >>> 16) & 0xff, (low >>> 8) & 0xff, low & 0xff);
+  }
+  function padSHA(bytes) {
+    var ml = bytes.length, msg = bytes.slice();
+    msg.push(0x80);
+    while ((msg.length % 64) !== 56) msg.push(0);
+    appendBitLenBE(msg, ml);
+    return msg;
+  }
+  function sha1Bytes(bytes) {
+    var h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+    var msg = padSHA(bytes), off, i, w, a, b, c, d, e, f, k, temp, x;
+    for (off = 0; off < msg.length; off += 64) {
+      w = [];
+      for (i = 0; i < 16; i++) {
+        w[i] = (msg[off + i * 4] << 24) | (msg[off + i * 4 + 1] << 16) | (msg[off + i * 4 + 2] << 8) | msg[off + i * 4 + 3];
+      }
+      for (i = 16; i < 80; i++) {
+        x = w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16];
+        w[i] = (x << 1) | (x >>> 31);
+      }
+      a = h0; b = h1; c = h2; d = h3; e = h4;
+      for (i = 0; i < 80; i++) {
+        if (i < 20) { f = (b & c) | ((~b) & d); k = 0x5A827999; }
+        else if (i < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1; }
+        else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
+        else { f = b ^ c ^ d; k = 0xCA62C1D6; }
+        temp = (((a << 5) | (a >>> 27)) + f + e + k + (w[i] | 0)) | 0;
+        e = d; d = c; c = (b << 30) | (b >>> 2); b = a; a = temp;
+      }
+      h0 = (h0 + a) | 0; h1 = (h1 + b) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0; h4 = (h4 + e) | 0;
+    }
+    return wordsToBytes([h0, h1, h2, h3, h4]);
+  }
+  var SHA256_K = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ];
+  function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+  function sha256Bytes(bytes) {
+    var h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a;
+    var h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
+    var msg = padSHA(bytes), off, i, w, a, b, c, d, e, f, g, h, s0, s1, ch, maj, t1, t2, S0, S1;
+    for (off = 0; off < msg.length; off += 64) {
+      w = [];
+      for (i = 0; i < 16; i++) {
+        w[i] = (msg[off + i * 4] << 24) | (msg[off + i * 4 + 1] << 16) | (msg[off + i * 4 + 2] << 8) | msg[off + i * 4 + 3];
+      }
+      for (i = 16; i < 64; i++) {
+        s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+        s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+      }
+      a = h0; b = h1; c = h2; d = h3; e = h4; f = h5; g = h6; h = h7;
+      for (i = 0; i < 64; i++) {
+        S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+        ch = (e & f) ^ ((~e) & g);
+        t1 = (h + S1 + ch + SHA256_K[i] + w[i]) | 0;
+        S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+        maj = (a & b) ^ (a & c) ^ (b & c);
+        t2 = (S0 + maj) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+      }
+      h0 = (h0 + a) | 0; h1 = (h1 + b) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0;
+      h4 = (h4 + e) | 0; h5 = (h5 + f) | 0; h6 = (h6 + g) | 0; h7 = (h7 + h) | 0;
+    }
+    return wordsToBytes([h0, h1, h2, h3, h4, h5, h6, h7]);
+  }
+  function wordsToBytes(words) {
+    var out = [], i, n;
+    for (i = 0; i < words.length; i++) {
+      n = words[i];
+      out.push((n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff);
+    }
+    return out;
+  }
+  function hashHelper(digestFn) {
+    return function (msg) {
+      return bytesToWa(digestFn(waToBytes(toWordArray(msg))));
+    };
+  }
+  function hmacHelper(digestFn, blockSize) {
+    return function (msg, key) {
+      var keyBytes = waToBytes(toWordArray(key));
+      var msgBytes = waToBytes(toWordArray(msg));
+      if (keyBytes.length > blockSize) keyBytes = digestFn(keyBytes);
+      while (keyBytes.length < blockSize) keyBytes.push(0);
+      var oPad = [], iPad = [], i;
+      for (i = 0; i < blockSize; i++) {
+        oPad.push(keyBytes[i] ^ 0x5c);
+        iPad.push(keyBytes[i] ^ 0x36);
+      }
+      return bytesToWa(digestFn(oPad.concat(digestFn(iPad.concat(msgBytes)))));
+    };
+  }
+
+  function gfMul(a, b) {
+    var p = 0, i, hi;
+    for (i = 0; i < 8; i++) {
+      if (b & 1) p ^= a;
+      hi = a & 0x80;
+      a = (a << 1) & 0xff;
+      if (hi) a ^= 0x1b;
+      b >>= 1;
+    }
+    return p;
+  }
+  function gfInv(a) {
+    var b;
+    if (!a) return 0;
+    for (b = 1; b < 256; b++) if (gfMul(a, b) === 1) return b;
+    return 0;
+  }
+  function rotl8(x, n) { return ((x << n) | (x >>> (8 - n))) & 0xff; }
+  var SBOX = [], INV_SBOX = [];
+  (function initSbox() {
+    var i, invA, x;
+    for (i = 0; i < 256; i++) {
+      invA = gfInv(i);
+      x = invA ^ rotl8(invA, 1) ^ rotl8(invA, 2) ^ rotl8(invA, 3) ^ rotl8(invA, 4) ^ 0x63;
+      SBOX[i] = x;
+      INV_SBOX[x] = i;
+    }
+  })();
+  var RCON = [0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36];
+  function subWord(w) {
+    return ((SBOX[(w >>> 24) & 0xff] << 24) | (SBOX[(w >>> 16) & 0xff] << 16) |
+      (SBOX[(w >>> 8) & 0xff] << 8) | SBOX[w & 0xff]) >>> 0;
+  }
+  function rotWord(w) { return ((w << 8) | (w >>> 24)) >>> 0; }
+  function expandKey(keyBytes) {
+    var Nk = keyBytes.length / 4, Nr = Nk + 6, W = [], i, temp;
+    for (i = 0; i < Nk; i++) {
+      W[i] = ((keyBytes[4 * i] << 24) | (keyBytes[4 * i + 1] << 16) |
+        (keyBytes[4 * i + 2] << 8) | keyBytes[4 * i + 3]) >>> 0;
+    }
+    for (i = Nk; i < 4 * (Nr + 1); i++) {
+      temp = W[i - 1];
+      if (i % Nk === 0) temp = (subWord(rotWord(temp)) ^ (RCON[i / Nk] << 24)) >>> 0;
+      else if (Nk > 6 && i % Nk === 4) temp = subWord(temp);
+      W[i] = (W[i - Nk] ^ temp) >>> 0;
+    }
+    return { W: W, Nr: Nr };
+  }
+  function bytesToState(b) {
+    var s = [[], [], [], []], r, c;
+    for (r = 0; r < 4; r++) for (c = 0; c < 4; c++) s[r][c] = b[r + 4 * c];
+    return s;
+  }
+  function stateToBytes(s) {
+    var b = [], r, c;
+    for (c = 0; c < 4; c++) for (r = 0; r < 4; r++) b[r + 4 * c] = s[r][c];
+    return b;
+  }
+  function addRoundKey(s, W, rnd) {
+    var c, w;
+    for (c = 0; c < 4; c++) {
+      w = W[rnd * 4 + c];
+      s[0][c] ^= (w >>> 24) & 0xff;
+      s[1][c] ^= (w >>> 16) & 0xff;
+      s[2][c] ^= (w >>> 8) & 0xff;
+      s[3][c] ^= w & 0xff;
+    }
+  }
+  function subBytes(s, inv) {
+    var box = inv ? INV_SBOX : SBOX, r, c;
+    for (r = 0; r < 4; r++) for (c = 0; c < 4; c++) s[r][c] = box[s[r][c]];
+  }
+  function shiftRows(s, inv) {
+    var r, t, i, n;
+    for (r = 1; r < 4; r++) {
+      t = s[r].slice();
+      for (i = 0; i < 4; i++) {
+        n = inv ? (i - r + 4) % 4 : (i + r) % 4;
+        s[r][i] = t[n];
+      }
+    }
+  }
+  function mixColumns(s) {
+    var c, a, b, c0, d, ta, tb, tc, td;
+    function xtime(x) { return ((x << 1) ^ ((x & 0x80) ? 0x1b : 0)) & 0xff; }
+    for (c = 0; c < 4; c++) {
+      a = s[0][c]; b = s[1][c]; c0 = s[2][c]; d = s[3][c];
+      ta = xtime(a); tb = xtime(b); tc = xtime(c0); td = xtime(d);
+      s[0][c] = ta ^ tb ^ b ^ c0 ^ d;
+      s[1][c] = a ^ tb ^ tc ^ c0 ^ d;
+      s[2][c] = a ^ b ^ tc ^ td ^ d;
+      s[3][c] = ta ^ a ^ b ^ c0 ^ td;
+    }
+  }
+  function invMixColumns(s) {
+    var c, a, b, c0, d;
+    for (c = 0; c < 4; c++) {
+      a = s[0][c]; b = s[1][c]; c0 = s[2][c]; d = s[3][c];
+      s[0][c] = gfMul(a, 14) ^ gfMul(b, 11) ^ gfMul(c0, 13) ^ gfMul(d, 9);
+      s[1][c] = gfMul(a, 9) ^ gfMul(b, 14) ^ gfMul(c0, 11) ^ gfMul(d, 13);
+      s[2][c] = gfMul(a, 13) ^ gfMul(b, 9) ^ gfMul(c0, 14) ^ gfMul(d, 11);
+      s[3][c] = gfMul(a, 11) ^ gfMul(b, 13) ^ gfMul(c0, 9) ^ gfMul(d, 14);
+    }
+  }
+  function aesEncryptBlock(input, exp) {
+    var s = bytesToState(input), rnd;
+    addRoundKey(s, exp.W, 0);
+    for (rnd = 1; rnd < exp.Nr; rnd++) {
+      subBytes(s, false); shiftRows(s, false); mixColumns(s); addRoundKey(s, exp.W, rnd);
+    }
+    subBytes(s, false); shiftRows(s, false); addRoundKey(s, exp.W, exp.Nr);
+    return stateToBytes(s);
+  }
+  function aesDecryptBlock(input, exp) {
+    var s = bytesToState(input), rnd;
+    addRoundKey(s, exp.W, exp.Nr);
+    for (rnd = exp.Nr - 1; rnd > 0; rnd--) {
+      shiftRows(s, true); subBytes(s, true); addRoundKey(s, exp.W, rnd); invMixColumns(s);
+    }
+    shiftRows(s, true); subBytes(s, true); addRoundKey(s, exp.W, 0);
+    return stateToBytes(s);
+  }
+  function xorBlocks(a, b) {
+    var out = [], i;
+    for (i = 0; i < 16; i++) out[i] = a[i] ^ b[i];
+    return out;
+  }
+  function pkcs7Pad(bytes) {
+    var n = 16 - (bytes.length % 16), i, out = bytes.slice();
+    if (n === 0) n = 16;
+    for (i = 0; i < n; i++) out.push(n);
+    return out;
+  }
+  function pkcs7Unpad(bytes) {
+    if (!bytes.length) return bytes;
+    var n = bytes[bytes.length - 1], i;
+    if (n < 1 || n > 16 || n > bytes.length) return bytes;
+    for (i = 0; i < n; i++) if (bytes[bytes.length - 1 - i] !== n) return bytes;
+    return bytes.slice(0, bytes.length - n);
+  }
+  function zeroPad(bytes) {
+    var out = bytes.slice();
+    while (out.length % 16) out.push(0);
+    return out;
+  }
+  function zeroUnpad(bytes) {
+    var i = bytes.length;
+    while (i > 0 && bytes[i - 1] === 0) i--;
+    return bytes.slice(0, i);
+  }
+  var Pkcs7 = { pad: pkcs7Pad, unpad: pkcs7Unpad };
+  var ZeroPadding = { pad: zeroPad, unpad: zeroUnpad };
+  var NoPadding = {
+    pad: function (b) { return b; },
+    unpad: function (b) { return b; }
+  };
+  function modeNameOf(mode) {
+    if (!mode) return 'CBC';
+    if (typeof mode === 'string') return mode.toUpperCase();
+    return mode.name || 'CBC';
+  }
+  function normalizeKeyBytes(keyBytes) {
+    if (keyBytes.length === 16 || keyBytes.length === 24 || keyBytes.length === 32) return keyBytes;
+    if (keyBytes.length < 16) {
+      while (keyBytes.length < 16) keyBytes.push(0);
+      return keyBytes;
+    }
+    if (keyBytes.length < 24) {
+      while (keyBytes.length < 24) keyBytes.push(0);
+      return keyBytes;
+    }
+    while (keyBytes.length < 32) keyBytes.push(0);
+    return keyBytes.slice(0, 32);
+  }
+  function evpKDF(passwordBytes, saltBytes, keyLen, ivLen) {
+    var derived = [], block = [], total = keyLen + ivLen, input, i;
+    while (derived.length < total) {
+      input = block.concat(passwordBytes, saltBytes);
+      block = md5Bytes(input);
+      for (i = 0; i < block.length; i++) derived.push(block[i]);
+    }
+    return { key: derived.slice(0, keyLen), iv: derived.slice(keyLen, total) };
+  }
+  function processAES(encrypt, dataBytes, keyBytes, ivBytes, mode, padding) {
+    var exp = expandKey(keyBytes);
+    var blocks = [], i, block, prev, out = [], n;
+    var name = modeNameOf(mode);
+    var pad = padding && padding.pad ? padding : Pkcs7;
+    prev = (ivBytes && ivBytes.length) ? ivBytes.slice(0, 16) : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    while (prev.length < 16) prev.push(0);
+    if (encrypt) dataBytes = pad.pad(dataBytes.slice());
+    if (dataBytes.length % 16) {
+      n = 16 - (dataBytes.length % 16);
+      for (i = 0; i < n; i++) dataBytes.push(0);
+    }
+    for (i = 0; i < dataBytes.length; i += 16) {
+      block = dataBytes.slice(i, i + 16);
+      if (encrypt) {
+        if (name !== 'ECB') block = xorBlocks(block, prev);
+        block = aesEncryptBlock(block, exp);
+        if (name !== 'ECB') prev = block.slice();
+      } else {
+        var raw = block.slice();
+        block = aesDecryptBlock(block, exp);
+        if (name !== 'ECB') {
+          block = xorBlocks(block, prev);
+          prev = raw;
+        }
+      }
+      for (n = 0; n < 16; n++) out.push(block[n]);
+    }
+    if (!encrypt) out = pad.unpad(out);
+    return out;
+  }
+  function CipherParams(cfg) {
+    this.ciphertext = cfg.ciphertext;
+    this.key = cfg.key;
+    this.iv = cfg.iv;
+    this.salt = cfg.salt;
+    this.algorithm = cfg.algorithm;
+    this.mode = cfg.mode;
+    this.padding = cfg.padding;
+    this.blockSize = cfg.blockSize || 4;
+    this.formatter = cfg.formatter || OpenSSLFormatter;
+  }
+  CipherParams.prototype.toString = function (formatter) {
+    return (formatter || this.formatter).stringify(this);
+  };
+  var OpenSSLFormatter = {
+    stringify: function (params) {
+      var ct = params.ciphertext;
+      if (params.salt) {
+        var saltBytes = waToBytes(params.salt);
+        var head = [0x53, 0x61, 0x6c, 0x74, 0x65, 0x64, 0x5f, 0x5f].concat(saltBytes, waToBytes(ct));
+        return base64Stringify(bytesToWa(head));
+      }
+      return base64Stringify(ct);
+    },
+    parse: function (str) {
+      var wa = base64Parse(str);
+      var bytes = waToBytes(wa);
+      var salted = bytes.length >= 16 && bytes[0] === 0x53 && bytes[1] === 0x61 && bytes[2] === 0x6c &&
+        bytes[3] === 0x74 && bytes[4] === 0x65 && bytes[5] === 0x64 && bytes[6] === 0x5f && bytes[7] === 0x5f;
+      if (salted) {
+        return new CipherParams({
+          salt: bytesToWa(bytes.slice(8, 16)),
+          ciphertext: bytesToWa(bytes.slice(16))
+        });
+      }
+      return new CipherParams({ ciphertext: wa });
+    }
+  };
+  function parseCiphertext(cipher) {
+    if (!cipher) return new CipherParams({ ciphertext: new WordArray([], 0) });
+    if (typeof cipher === 'string') return OpenSSLFormatter.parse(cipher);
+    if (cipher.ciphertext) return cipher;
+    if (cipher.words && cipher.sigBytes != null) return new CipherParams({ ciphertext: cipher });
+    return OpenSSLFormatter.parse(String(cipher));
+  }
+  function aesEncrypt(message, key, cfg) {
+    cfg = cfg || {};
+    var msgBytes = waToBytes(toWordArray(message));
+    var mode = cfg.mode || CryptoJS.mode.CBC;
+    var padding = cfg.padding || CryptoJS.pad.Pkcs7;
+    var keyBytes, ivBytes, salt;
+    if (typeof key === 'string') {
+      salt = cfg.salt ? waToBytes(toWordArray(cfg.salt)) : waToBytes(WordArray.random(8));
+      if (salt.length < 8) while (salt.length < 8) salt.push(0);
+      salt = salt.slice(0, 8);
+      var derived = evpKDF(waToBytes(utf8Parse(key)), salt, 32, 16);
+      keyBytes = derived.key;
+      ivBytes = derived.iv;
+    } else {
+      keyBytes = normalizeKeyBytes(waToBytes(toWordArray(key)));
+      ivBytes = cfg.iv ? waToBytes(toWordArray(cfg.iv)) : waToBytes(WordArray.random(16));
+    }
+    var out = processAES(true, msgBytes, keyBytes, ivBytes, mode, padding);
+    return new CipherParams({
+      ciphertext: bytesToWa(out),
+      key: bytesToWa(keyBytes),
+      iv: bytesToWa(ivBytes),
+      salt: salt ? bytesToWa(salt) : undefined,
+      mode: mode,
+      padding: padding,
+      formatter: OpenSSLFormatter
+    });
+  }
+  function aesDecrypt(cipher, key, cfg) {
+    cfg = cfg || {};
+    try {
+      var params = parseCiphertext(cipher);
+      var mode = cfg.mode || params.mode || CryptoJS.mode.CBC;
+      var padding = cfg.padding || params.padding || CryptoJS.pad.Pkcs7;
+      var keyBytes, ivBytes;
+      if (typeof key === 'string') {
+        var saltBytes = params.salt ? waToBytes(params.salt) : [];
+        var derived = evpKDF(waToBytes(utf8Parse(key)), saltBytes, 32, 16);
+        keyBytes = derived.key;
+        ivBytes = derived.iv;
+      } else {
+        keyBytes = normalizeKeyBytes(waToBytes(toWordArray(key)));
+        ivBytes = cfg.iv ? waToBytes(toWordArray(cfg.iv)) : (params.iv ? waToBytes(params.iv) : []);
+      }
+      var out = processAES(false, waToBytes(params.ciphertext), keyBytes, ivBytes, mode, padding);
+      return bytesToWa(out);
+    } catch (e) {
+      return new WordArray([], 0);
+    }
+  }
+
+  var CryptoJS = {
+    lib: { WordArray: WordArray, CipherParams: CipherParams },
+    enc: {
+      Utf8: { parse: utf8Parse, stringify: utf8Stringify },
+      Hex: { parse: hexParse, stringify: hexStringify },
+      Base64: { parse: base64Parse, stringify: base64Stringify },
+      Latin1: { parse: latin1Parse, stringify: latin1Stringify }
+    },
+    mode: { CBC: { name: 'CBC' }, ECB: { name: 'ECB' } },
+    pad: { Pkcs7: Pkcs7, PKCS7: Pkcs7, ZeroPadding: ZeroPadding, NoPadding: NoPadding },
+    format: { OpenSSL: OpenSSLFormatter },
+    MD5: hashHelper(md5Bytes),
+    SHA1: hashHelper(sha1Bytes),
+    SHA256: hashHelper(sha256Bytes),
+    HmacSHA1: hmacHelper(sha1Bytes, 64),
+    HmacSHA256: hmacHelper(sha256Bytes, 64),
+    AES: { encrypt: aesEncrypt, decrypt: aesDecrypt }
+  };
+
+  function qsStringify(obj, opts) {
+    opts = opts || {};
+    var enc = opts.encode === false ? function (s) { return String(s); } : encodeURIComponent;
+    function walk(value, prefix) {
+      if (value === undefined) return [];
+      if (value === null) return prefix ? [enc(prefix) + '='] : [];
+      if (Object.prototype.toString.call(value) === '[object Date]') {
+        return [enc(prefix) + '=' + enc(value.toISOString())];
+      }
+      if (typeof value !== 'object') {
+        return [enc(prefix) + '=' + enc(String(value))];
+      }
+      var acc = [], keys, i, k, next;
+      if (Array.isArray(value)) {
+        for (i = 0; i < value.length; i++) {
+          next = prefix ? prefix + '[' + i + ']' : String(i);
+          acc = acc.concat(walk(value[i], next));
+        }
+        return acc;
+      }
+      keys = Object.keys(value);
+      for (i = 0; i < keys.length; i++) {
+        k = keys[i];
+        if (value[k] === undefined) continue;
+        next = prefix ? prefix + '[' + k + ']' : k;
+        acc = acc.concat(walk(value[k], next));
+      }
+      return acc;
+    }
+    return walk(obj, '').join('&');
+  }
+  function qsParse(str) {
+    var out = {};
+    String(str || '').replace(/^\?/, '').split('&').forEach(function (p) {
+      if (!p) return;
+      var eq = p.indexOf('=');
+      var rawK = eq < 0 ? p : p.slice(0, eq);
+      var rawV = eq < 0 ? '' : p.slice(eq + 1);
+      var k, v, parts = [], cur, j, part, next;
+      try { k = decodeURIComponent(rawK.replace(/\+/g, ' ')); } catch (e) { k = rawK; }
+      try { v = decodeURIComponent(rawV.replace(/\+/g, ' ')); } catch (e2) { v = rawV; }
+      k.replace(/([^\[\]]+)|\[([^\]]*)\]/g, function (_, n, b) {
+        parts.push(n !== undefined ? n : b);
+      });
+      if (!parts.length) return;
+      cur = out;
+      for (j = 0; j < parts.length; j++) {
+        part = parts[j];
+        next = parts[j + 1];
+        if (j === parts.length - 1) {
+          if (part === '') {
+            if (!Array.isArray(cur)) return;
+            cur.push(v);
+          } else if (Object.prototype.hasOwnProperty.call(cur, part) && j === 0 && next === undefined && typeof cur[part] !== 'object') {
+            if (!Array.isArray(cur[part])) cur[part] = [cur[part]];
+            cur[part].push(v);
+          } else {
+            cur[part] = v;
+          }
+        } else {
+          if (cur[part] == null || typeof cur[part] !== 'object') {
+            cur[part] = (next === '' || /^\d+$/.test(String(next))) ? [] : {};
+          }
+          cur = cur[part];
+        }
+      }
+    });
+    return out;
+  }
+  var qs = { stringify: qsStringify, parse: qsParse };
+
+  var he = {
+    decode: function (s) {
+      if (s == null) return '';
+      var t = document.createElement('textarea');
+      t.innerHTML = String(s);
+      return t.value;
+    },
+    encode: function (s, options) {
+      s = String(s == null ? '' : s);
+      var named = {
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;', '`': '&#x60;'
+      };
+      var out = s.replace(/[&<>"'`]/g, function (c) { return named[c]; });
+      if (options && options.allowUnsafeSymbols) return out;
+      return out.replace(/[^\x20-\x7E]/g, function (c) {
+        var code = c.charCodeAt(0);
+        if (code >= 0xd800 && code <= 0xdbff) return c;
+        return '&#x' + code.toString(16).toUpperCase() + ';';
+      });
+    }
+  };
+
+  function mergeConfig(a, b) {
+    var out = Object.assign({}, a || {}, b || {});
+    out.headers = Object.assign({}, (a && a.headers) || {}, (b && b.headers) || {});
+    return out;
+  }
+  function flattenHeaders(headers, method) {
+    if (!headers) return {};
+    var m = (method || 'get').toLowerCase();
+    var skip = { common: 1, get: 1, post: 1, put: 1, delete: 1, patch: 1, head: 1 };
+    var out = Object.assign({}, headers.common || {}, headers[m] || {});
+    Object.keys(headers).forEach(function (k) {
+      if (!skip[k]) out[k] = headers[k];
+    });
+    return out;
+  }
+  function headerOf(headers, name) {
+    var keys = Object.keys(headers || {}), i, k;
+    name = String(name).toLowerCase();
+    for (i = 0; i < keys.length; i++) {
+      k = keys[i];
+      if (String(k).toLowerCase() === name) return headers[k];
+    }
+    return undefined;
+  }
+  function combineURL(base, rel) {
+    if (!rel) return base || '';
+    if (!base) return rel;
+    if (/^([a-z][a-z0-9+\-.]*:)?\/\//i.test(rel)) return rel;
+    return String(base).replace(/\/+$/, '') + '/' + String(rel).replace(/^\/+/, '');
+  }
+  function buildURL(url, params, paramsSerializer) {
+    if (!params) return url;
+    var s = typeof paramsSerializer === 'function'
+      ? paramsSerializer(params)
+      : (typeof params === 'string' ? params : qsStringify(params));
+    if (!s) return url;
+    return url + (url.indexOf('?') >= 0 ? '&' : '?') + s;
+  }
+  var httpSeq = 0;
+  var pendingHttp = {};
+  window.__mfHttpResult = function (id, ok, payload) {
+    var p = pendingHttp[id];
+    if (!p) return;
+    delete pendingHttp[id];
+    var data = payload;
+    if (typeof payload === 'string') {
+      try { data = JSON.parse(payload); } catch (e0) { data = payload; }
+    }
+    if (ok === 1 || ok === '1' || ok === true) p.resolve(data);
+    else p.reject(new Error((data && data.message) || data || 'fetch fail'));
+  };
+  function nativeHttpFn(native) {
+    if (!native) return null;
+    if (typeof native.mfHttp === 'function') return function (id, cfg) { return native.mfHttp(id, cfg); };
+    if (typeof native.http === 'function') return function (id, cfg) { return native.http(id, cfg); };
+    return null;
+  }
+  function nativeHttp(req) {
+    return new Promise(function (resolve, reject) {
+      var timeout = req.timeout != null && req.timeout > 0 ? req.timeout : 20000;
+      var tries = 0;
+      function start() {
+        var send = nativeHttpFn(getNative());
+        if (!send) {
+          tries += 1;
+          if (tries < 40) {
+            setTimeout(start, 50);
+            return;
+          }
+          reject(new Error('fetch fail'));
+          return;
+        }
+        httpSeq += 1;
+        var id = 'h' + httpSeq;
+        pendingHttp[id] = { resolve: resolve, reject: reject };
+        try {
+          send(String(id), JSON.stringify({
+            method: req.method || 'GET',
+            url: req.url,
+            headers: req.headers || {},
+            body: req.body == null ? '' : String(req.body),
+            timeout: timeout
+          }));
+        } catch (e) {
+          delete pendingHttp[id];
+          reject(e);
+          return;
+        }
+        setTimeout(function () {
+          if (pendingHttp[id]) {
+            delete pendingHttp[id];
+            var te = new Error('timeout of ' + timeout + 'ms exceeded');
+            te.code = 'ECONNABORTED';
+            te.isAxiosError = true;
+            reject(te);
+          }
+        }, timeout + 3000);
+      }
+      start();
+    });
+  }
+  function normalizeNativeHeaders(raw) {
+    var hdrs = {}, parsed = raw, keys, i, k, v;
+    if (typeof raw === 'string') {
+      try { parsed = JSON.parse(raw); } catch (e1) { parsed = {}; }
+    }
+    parsed = parsed || {};
+    keys = Object.keys(parsed);
+    for (i = 0; i < keys.length; i++) {
+      k = keys[i];
+      v = parsed[k];
+      hdrs[String(k).toLowerCase()] = v;
+    }
+    if (typeof hdrs['set-cookie'] === 'string' && hdrs['set-cookie'].indexOf('\n') >= 0) {
+      hdrs['set-cookie'] = hdrs['set-cookie'].split('\n');
+    }
+    if (hdrs['set-cookie'] && !Array.isArray(hdrs['set-cookie'])) {
+      hdrs['set-cookie'] = [hdrs['set-cookie']];
+    }
+    if (hdrs['set-cookie'] && hdrs['set-cookie'].length === 1) {
+      hdrs['x-set-cookie'] = hdrs['set-cookie'];
+      hdrs['set-cookie'] = String(hdrs['set-cookie'][0]).split(',');
+    }
+    return hdrs;
+  }
+  function nativeReplyToResponse(raw, config) {
+    var status = Number(raw && raw.status) || 0;
+    var body = raw && raw.body != null ? raw.body : '';
+    var responseType = (config && config.responseType) || 'json';
+    var data = body;
+    if (responseType === 'json') {
+      if (typeof body === 'string' && body) {
+        try { data = JSON.parse(body); } catch (e4) { data = body; }
+      }
+    }
+    var response = {
+      data: data,
+      status: status,
+      statusText: (raw && raw.statusText) || '',
+      headers: normalizeNativeHeaders(raw && (raw.headersJson || raw.headers)),
+      config: config || {},
+      request: {}
+    };
+    var validate = (config && config.validateStatus) || function (st) { return st >= 200 && st < 300; };
+    if (!validate(status)) {
+      var err = new Error(status ? ('Request failed with status code ' + status) : 'fetch fail');
+      err.response = response;
+      err.config = config;
+      err.isAxiosError = true;
+      throw err;
+    }
+    return response;
+  }
+  function FakeHeaders(map) {
+    this._map = map || {};
+  }
+  FakeHeaders.prototype.get = function (name) {
+    return this._map[String(name).toLowerCase()];
+  };
+  FakeHeaders.prototype.forEach = function (cb) {
+    var keys = Object.keys(this._map), i;
+    for (i = 0; i < keys.length; i++) cb(this._map[keys[i]], keys[i]);
+  };
+  function FakeResponse(body, init) {
+    init = init || {};
+    this._body = body == null ? '' : body;
+    this.status = init.status || 0;
+    this.statusText = init.statusText || '';
+    this.ok = this.status >= 200 && this.status < 300;
+    this.headers = init.headers || new FakeHeaders({});
+  }
+  FakeResponse.prototype.text = function () { return Promise.resolve(String(this._body)); };
+  FakeResponse.prototype.json = function () {
+    var text = String(this._body);
+    try { return Promise.resolve(JSON.parse(text)); } catch (e5) { return Promise.reject(e5); }
+  };
+  FakeResponse.prototype.arrayBuffer = function () { return Promise.resolve(new ArrayBuffer(0)); };
+  window.fetch = function (input, init) {
+    init = init || {};
+    var url = typeof input === 'string' ? input : (input && input.url);
+    var method = init.method || (input && input.method) || 'GET';
+    var headers = {};
+    var src = init.headers || (input && input.headers);
+    if (src) {
+      if (typeof src.forEach === 'function') src.forEach(function (v, k) { headers[k] = v; });
+      else Object.keys(src).forEach(function (k) { headers[k] = src[k]; });
+    }
+    return nativeHttp({
+      method: method,
+      url: url,
+      headers: headers,
+      body: init.body,
+      timeout: 20000
+    }).then(function (raw) {
+      if (raw && raw.error && !raw.status) throw new Error(raw.error || 'fetch fail');
+      var hdrs = normalizeNativeHeaders(raw && (raw.headersJson || raw.headers));
+      var res = new FakeResponse(raw && raw.body, {
+        status: Number(raw && raw.status) || 0,
+        statusText: (raw && raw.statusText) || '',
+        headers: new FakeHeaders(hdrs)
+      });
+      return res;
+    });
+  };
+  function createInterceptorManager() {
+    var handlers = [];
+    return {
+      handlers: handlers,
+      use: function (fulfilled, rejected) {
+        handlers.push({ fulfilled: fulfilled, rejected: rejected });
+        return handlers.length - 1;
+      },
+      eject: function (idx) {
+        if (handlers[idx]) handlers[idx] = null;
+      }
+    };
+  }
+  function runInterceptors(promise, handlers, fulfilledKey, rejectedKey) {
+    var i, h;
+    for (i = 0; i < handlers.length; i++) {
+      h = handlers[i];
+      if (!h) continue;
+      promise = promise.then(h[fulfilledKey], h[rejectedKey]);
+    }
+    return promise;
+  }
+  function dispatchAxios(config) {
+    var method = String(config.method || 'get').toUpperCase();
+    var url = buildURL(combineURL(config.baseURL, config.url), config.params, config.paramsSerializer);
+    var headers = flattenHeaders(config.headers, method);
+    var body = config.data;
+    var ct = headerOf(headers, 'Content-Type');
+    if (body && typeof body === 'object' &&
+        !(typeof FormData !== 'undefined' && body instanceof FormData) &&
+        !(typeof Blob !== 'undefined' && body instanceof Blob) &&
+        !(typeof ArrayBuffer !== 'undefined' && body instanceof ArrayBuffer) &&
+        !(body.words && body.sigBytes != null)) {
+      if (!ct) {
+        headers['Content-Type'] = 'application/json';
+        ct = 'application/json';
+      }
+      if (String(ct).indexOf('application/x-www-form-urlencoded') >= 0) body = qsStringify(body);
+      else if (String(ct).indexOf('application/json') >= 0 || typeof body !== 'string') {
+        try { body = JSON.stringify(body); } catch (e) { body = String(body); }
+      }
+    }
+    var timeout = config.timeout != null ? config.timeout : 20000;
+    return nativeHttp({
+      method: method,
+      url: url,
+      headers: headers,
+      body: method === 'GET' || method === 'HEAD' ? '' : body,
+      timeout: timeout
+    }).then(function (raw) {
+      if (raw && raw.error && !raw.status) throw new Error(raw.error);
+      return nativeReplyToResponse(raw, config);
+    });
+  }
+  function createAxios(instanceCfg) {
+    var interceptors = {
+      request: createInterceptorManager(),
+      response: createInterceptorManager()
+    };
+    function axios(config, maybe) {
+      var cfg = typeof config === 'string'
+        ? mergeConfig(axios.defaults, mergeConfig(maybe || {}, { url: config }))
+        : mergeConfig(axios.defaults, config || {});
+      var p = Promise.resolve(cfg);
+      p = runInterceptors(p, interceptors.request.handlers.slice().reverse(), 'fulfilled', 'rejected');
+      p = p.then(dispatchAxios);
+      p = runInterceptors(p, interceptors.response.handlers, 'fulfilled', 'rejected');
+      return p;
+    }
+    axios.defaults = mergeConfig({ timeout: 20000, headers: {} }, instanceCfg || {});
+    if (!axios.defaults.headers) axios.defaults.headers = {};
+    axios.interceptors = interceptors;
+    axios.create = function (cfg) { return createAxios(mergeConfig(axios.defaults, cfg)); };
+    axios.request = axios;
+    axios.get = function (url, config) { return axios(mergeConfig(config, { url: url, method: 'GET' })); };
+    axios.delete = function (url, config) { return axios(mergeConfig(config, { url: url, method: 'DELETE' })); };
+    axios.head = function (url, config) { return axios(mergeConfig(config, { url: url, method: 'HEAD' })); };
+    axios.post = function (url, data, config) { return axios(mergeConfig(config, { url: url, method: 'POST', data: data })); };
+    axios.put = function (url, data, config) { return axios(mergeConfig(config, { url: url, method: 'PUT', data: data })); };
+    axios.patch = function (url, data, config) { return axios(mergeConfig(config, { url: url, method: 'PATCH', data: data })); };
+    return axios;
+  }
+  var axiosLike = createAxios({ timeout: 20000 });
+  axiosLike.interceptors.response.use(function (response) {
+    var setCookie = response.headers && response.headers['set-cookie'];
+    if (setCookie && setCookie.length === 1) {
+      response.headers['set-cookie'] = String(setCookie[0]).split(',');
+      response.headers['x-set-cookie'] = setCookie;
+    }
+    try {
+      var cfgUrl = (response.config && (response.config.url || (response.config.baseURL || '') + (response.config.url || ''))) || '';
+      var payload = response.data;
+      if (payload && payload.data && typeof payload.data === 'object' && payload.data.list == null &&
+          String(cfgUrl).indexOf('api.bilibili.com/x/web-interface/') >= 0) {
+        payload.data.list = [];
+      }
+    } catch (eBili) {}
+    return response;
+  }, function (err) {
+    var cfg = err && err.config;
+    if (!cfg || cfg.__mfRetried) return Promise.reject(err);
+    var msg = err && err.message ? String(err.message) : '';
+    if (msg.indexOf('fetch fail') < 0) {
+      return Promise.reject(err);
+    }
+    cfg.__mfRetried = true;
+    return axiosLike.request(cfg);
+  });
+
+  function pad2(n) {
+    return n < 10 ? '0' + n : String(n);
+  }
+  function formatDate(d, fmt) {
+    if (!fmt) return d.toISOString();
+    return String(fmt)
+      .replace(/YYYY/g, String(d.getFullYear()))
+      .replace(/MM/g, pad2(d.getMonth() + 1))
+      .replace(/DD/g, pad2(d.getDate()))
+      .replace(/HH/g, pad2(d.getHours()))
+      .replace(/mm/g, pad2(d.getMinutes()))
+      .replace(/ss/g, pad2(d.getSeconds()));
+  }
+  function dayjs(input) {
+    var d;
+    if (input === undefined || input === null || input === '') d = new Date();
+    else if (input instanceof Date) d = input;
+    else if (typeof input === 'number') d = new Date(input < 1e12 ? input * 1000 : input);
+    else d = new Date(input);
+    if (isNaN(d.getTime())) d = new Date();
+    return {
+      format: function (fmt) { return formatDate(d, fmt); },
+      valueOf: function () { return d.getTime(); },
+      unix: function () { return Math.floor(d.getTime() / 1000); },
+      toDate: function () { return d; }
+    };
+  }
+  dayjs.unix = function (sec) { return dayjs(Number(sec) * 1000); };
+  dayjs.extend = function () { return dayjs; };
+
+  function uniqueNodes(arr) {
+    var out = [], seen = [], i;
+    for (i = 0; i < arr.length; i++) {
+      if (arr[i] && seen.indexOf(arr[i]) < 0) { seen.push(arr[i]); out.push(arr[i]); }
+    }
+    return out;
+  }
+  function splitComma(selector) {
+    var parts = [], cur = '', depth = 0, i, ch;
+    for (i = 0; i < selector.length; i++) {
+      ch = selector.charAt(i);
+      if (ch === '[' || ch === '(') depth++;
+      else if (ch === ']' || ch === ')') depth = Math.max(0, depth - 1);
+      else if (ch === ',' && depth === 0) { parts.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    if (cur.trim()) parts.push(cur);
+    return parts;
+  }
+  function selectOne(roots, selector) {
+    selector = String(selector || '').trim();
+    if (!selector) return [];
+    var eqMatch = selector.match(/:eq\((-?\d+)\)\s*$/);
+    var isFirst = /:first\s*$/.test(selector);
+    var isLast = /:last\s*$/.test(selector);
+    var contains = selector.match(/:contains\((['"]?)([\s\S]*)\1\)\s*$/);
+    var css = selector
+      .replace(/:eq\((-?\d+)\)\s*$/, '')
+      .replace(/:first\s*$/, '')
+      .replace(/:last\s*$/, '')
+      .replace(/:contains\((['"]?)([\s\S]*)\1\)\s*$/, '');
+    css = css.trim() || '*';
+    var found = [];
+    roots.forEach(function (root) {
+      if (!root || !root.querySelectorAll) return;
+      try {
+        found = found.concat(Array.prototype.slice.call(root.querySelectorAll(css)));
+      } catch (e) {}
+    });
+    if (contains) {
+      var text = contains[2];
+      found = found.filter(function (n) { return (n.textContent || '').indexOf(text) >= 0; });
+    }
+    if (eqMatch) {
+      var idx = parseInt(eqMatch[1], 10);
+      if (idx < 0) idx = found.length + idx;
+      found = found[idx] ? [found[idx]] : [];
+    } else if (isFirst) {
+      found = found[0] ? [found[0]] : [];
+    } else if (isLast) {
+      found = found.length ? [found[found.length - 1]] : [];
+    }
+    return found;
+  }
+  function selectFrom(roots, selector) {
+    var parts = splitComma(String(selector || '')), out = [], i;
+    if (!parts.length) return selectOne(roots, selector);
+    for (i = 0; i < parts.length; i++) out = out.concat(selectOne(roots, parts[i].trim()));
+    return uniqueNodes(out);
+  }
+  function nodeHtml(node) {
+    if (!node) return '';
+    if (node.nodeType === 9) return node.documentElement ? node.documentElement.innerHTML : '';
+    return node.innerHTML || '';
+  }
+  function createSelection(nodes) {
+    nodes = uniqueNodes(Array.prototype.slice.call(nodes || []));
+    var sel = {
+      cheerio: true,
+      length: nodes.length,
+      toArray: function () { return nodes.slice(); },
+      get: function (i) { return i == null ? nodes.slice() : (i < 0 ? nodes[nodes.length + i] : nodes[i]); },
+      eq: function (i) {
+        if (i < 0) i = nodes.length + i;
+        return createSelection(nodes[i] ? [nodes[i]] : []);
+      },
+      first: function () { return sel.eq(0); },
+      last: function () { return sel.eq(-1); },
+      find: function (selector) { return createSelection(selectFrom(nodes, selector)); },
+      parent: function (selector) {
+        var found = [];
+        nodes.forEach(function (n) {
+          var p = n.parentElement;
+          if (p && (!selector || (p.matches && p.matches(selector)))) found.push(p);
+        });
+        return createSelection(found);
+      },
+      children: function (selector) {
+        var found = [];
+        nodes.forEach(function (n) {
+          var ch = n.children ? Array.prototype.slice.call(n.children) : [];
+          if (selector) ch = ch.filter(function (c) { return c.matches && c.matches(selector); });
+          found = found.concat(ch);
+        });
+        return createSelection(found);
+      },
+      next: function (selector) {
+        var found = [];
+        nodes.forEach(function (n) {
+          var nx = n.nextElementSibling;
+          if (nx && (!selector || (nx.matches && nx.matches(selector)))) found.push(nx);
+        });
+        return createSelection(found);
+      },
+      prev: function (selector) {
+        var found = [];
+        nodes.forEach(function (n) {
+          var pv = n.previousElementSibling;
+          if (pv && (!selector || (pv.matches && pv.matches(selector)))) found.push(pv);
+        });
+        return createSelection(found);
+      },
+      attr: function (name, value) {
+        if (name == null) {
+          if (!nodes[0] || !nodes[0].attributes) return undefined;
+          var all = {};
+          Array.prototype.forEach.call(nodes[0].attributes, function (a) { all[a.name] = a.value; });
+          return all;
+        }
+        if (arguments.length === 1) {
+          return nodes[0] && nodes[0].getAttribute ? (nodes[0].getAttribute(name) == null ? undefined : nodes[0].getAttribute(name)) : undefined;
+        }
+        nodes.forEach(function (n) { if (n.setAttribute) n.setAttribute(name, value); });
+        return sel;
+      },
+      text: function (value) {
+        if (arguments.length) {
+          nodes.forEach(function (n) { n.textContent = value; });
+          return sel;
+        }
+        return nodes.map(function (n) { return n.textContent || ''; }).join('');
+      },
+      html: function (value) {
+        if (arguments.length) {
+          nodes.forEach(function (n) { if (n.nodeType === 1) n.innerHTML = value; });
+          return sel;
+        }
+        return nodeHtml(nodes[0]);
+      },
+      each: function (cb) {
+        var i, r;
+        for (i = 0; i < nodes.length; i++) {
+          r = cb.call(nodes[i], i, nodes[i]);
+          if (r === false) break;
+        }
+        return sel;
+      },
+      map: function (cb) {
+        var mapped = [], i, r;
+        for (i = 0; i < nodes.length; i++) {
+          r = cb.call(nodes[i], i, nodes[i]);
+          if (r != null) {
+            if (r.cheerio && typeof r.toArray === 'function') mapped = mapped.concat(r.toArray());
+            else mapped.push(r);
+          }
+        }
+        var fake = createSelection(mapped.filter(function (x) { return x && x.nodeType; }));
+        fake.length = mapped.length;
+        for (i = 0; i < mapped.length; i++) fake[i] = mapped[i];
+        fake.toArray = function () { return mapped.slice(); };
+        fake.get = function (idx) { return idx == null ? mapped.slice() : mapped[idx]; };
+        return fake;
+      }
+    };
+    var i;
+    for (i = 0; i < nodes.length; i++) sel[i] = nodes[i];
+    return sel;
+  }
+  function parseHtml(html) {
+    var mime = /^\s*<\?xml|^\s*<(rss|feed)\b/i.test(html) ? 'application/xml' : 'text/html';
+    var doc = new DOMParser().parseFromString(html, mime);
+    if (doc && doc.getElementsByTagName && doc.getElementsByTagName('parsererror').length && mime !== 'text/html') {
+      doc = new DOMParser().parseFromString(html, 'text/html');
+    }
+    return doc;
+  }
+  function cheerioLoad(input) {
+    var doc;
+    if (typeof input === 'string') doc = parseHtml(input);
+    else if (input && input.nodeType === 9) doc = input;
+    else if (input && input.nodeType) doc = input.ownerDocument || input;
+    else doc = parseHtml('');
+    var root = [doc];
+    function $(selector, context) {
+      if (selector == null || selector === '') return createSelection([]);
+      if (context) return $(context).find(selector);
+      if (typeof selector === 'string') {
+        if (/^\s*</.test(selector)) {
+          var frag = parseHtml(selector);
+          var kids = frag.body ? Array.prototype.slice.call(frag.body.children) : [frag.documentElement];
+          return createSelection(kids.filter(Boolean));
+        }
+        return createSelection(selectFrom(root, selector));
+      }
+      if (selector.nodeType) return createSelection([selector]);
+      if (selector.cheerio) return selector;
+      if (selector.length != null && typeof selector !== 'function') {
+        var arr = [], i, item;
+        for (i = 0; i < selector.length; i++) {
+          item = selector[i];
+          if (item && item.nodeType) arr.push(item);
+          else if (item && item.cheerio && item[0]) arr.push(item[0]);
+        }
+        return createSelection(arr);
+      }
+      return createSelection([]);
+    }
+    $.load = cheerioLoad;
+    $.html = function (sel) {
+      if (sel) return $(sel).html();
+      return doc.documentElement ? doc.documentElement.outerHTML : '';
+    };
+    $.root = function () { return createSelection(root); };
+    return $;
+  }
+  var cheerio = { load: cheerioLoad };
+
+  function bigInt(n) {
+    var v = BigInt(typeof n === 'object' && n && n.__v !== undefined ? n.__v : n);
+    function wrap(x) { return bigInt(x); }
+    return {
+      __v: v,
+      toString: function (r) { return v.toString(r || 10); },
+      add: function (x) { return wrap(v + BigInt(x.__v !== undefined ? x.__v : x)); },
+      subtract: function (x) { return wrap(v - BigInt(x.__v !== undefined ? x.__v : x)); },
+      multiply: function (x) { return wrap(v * BigInt(x.__v !== undefined ? x.__v : x)); },
+      mod: function (x) { return wrap(v % BigInt(x.__v !== undefined ? x.__v : x)); },
+      valueOf: function () { return Number(v); }
+    };
+  }
+
+  var packages = {
+    'cheerio': cheerio,
+    'crypto-js': CryptoJS,
+    'axios': axiosLike,
+    'dayjs': dayjs,
+    'big-integer': bigInt,
+    'qs': qs,
+    'he': he,
+    '@react-native-cookies/cookies': { get: async function () { return {}; }, set: async function () {}, flush: async function () {} },
+    'webdav': {}
+  };
+  function _require(name) {
+    var pkg = packages[name] || {};
+    pkg.default = pkg;
+    return pkg;
+  }
+
+  var plugins = {};
+  window.__mfBox = window.__mfBox || {};
+  function getNative() {
+    return window.MusicFreeNative || null;
+  }
+  function reply(id, ok, payload) {
+    var p = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    var packed = JSON.stringify({ mf: 1, ok: ok ? 1 : 0, p: p });
+    window.__mfBox[String(id)] = packed;
+    return packed;
+  }
+  function log(msg) {
+    try {
+      var native = getNative();
+      if (native && native.onLog) native.onLog(String(msg));
+    } catch (e) {}
+  }
+  window.__mfTake = function (id) {
+    var v = window.__mfBox[String(id)];
+    if (v) delete window.__mfBox[String(id)];
+    return v || '';
+  };
+  window.__mfTakeMany = function (ids) {
+    var out = {};
+    if (!ids || !ids.length) return JSON.stringify(out);
+    for (var i = 0; i < ids.length; i++) {
+      var id = String(ids[i]);
+      var v = window.__mfBox[id];
+      if (v) {
+        delete window.__mfBox[id];
+        out[id] = v;
+      }
+    }
+    return JSON.stringify(out);
+  };
+
+  function amIsAudiomack(inst) {
+    if (!inst) return false;
+    return String(inst.platform || '').toLowerCase().indexOf('audiomack') >= 0;
+  }
+  function amEncode(e) {
+    return e ? encodeURIComponent(String(e)).replace(/[!'()]/g, escape).replace(/\*/g, '%2A') : '';
+  }
+  function amNonce(n) {
+    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    var r = '';
+    var i;
+    for (i = 0; i < n; i++) r += chars.charAt(Math.floor(Math.random() * chars.length));
+    return r;
+  }
+  function amSign(method, urlPath, params) {
+    urlPath = String(urlPath || '').split('?')[0];
+    if (urlPath.indexOf('http') !== 0) urlPath = 'https://api.audiomack.com/v1' + urlPath;
+    var keys = [];
+    var k;
+    for (k in params) {
+      if (Object.prototype.hasOwnProperty.call(params, k)) keys.push(amEncode(k));
+    }
+    keys.sort();
+    var parts = [];
+    for (var i = 0; i < keys.length; i++) {
+      parts.push(keys[i] + '=' + amEncode(params[decodeURIComponent(keys[i])]));
+    }
+    var base = amEncode(String(method).toUpperCase()) + '&' + amEncode(urlPath) + '&' + amEncode(parts.join('&'));
+    return CryptoJS.HmacSHA1(base, 'f3ac5b086f3eab260520d8e3049561e6&').toString(CryptoJS.enc.Base64);
+  }
+  function amGet(path, extra) {
+    var params = {
+      oauth_consumer_key: 'audiomack-js',
+      oauth_nonce: amNonce(32),
+      oauth_signature_method: 'HMAC-SHA1',
+      oauth_timestamp: Math.round(Date.now() / 1000),
+      oauth_version: '1.0'
+    };
+    extra = extra || {};
+    Object.keys(extra).forEach(function (key) {
+      if (extra[key] != null && extra[key] !== '') params[key] = extra[key];
+    });
+    params.oauth_signature = amSign('GET', path, params);
+    return axiosLike.get('https://api.audiomack.com/v1' + path, {
+      headers: {
+        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+        origin: 'https://audiomack.com'
+      },
+      params: params,
+      timeout: 25000
+    }).then(function (res) { return res && res.data ? res.data : {}; });
+  }
+  function amArtistName(raw) {
+    if (!raw) return '';
+    if (typeof raw === 'string') return raw;
+    return raw.name || raw.title || '';
+  }
+  function amFormatMusic(raw) {
+    if (!raw) return null;
+    var album = raw.album;
+    return {
+      id: raw.id,
+      artwork: raw.image || raw.image_base || '',
+      duration: Number(raw.duration) || 0,
+      title: raw.title || '',
+      artist: amArtistName(raw.artist),
+      album: typeof album === 'string' ? album : (album && album.title) || '',
+      url_slug: raw.url_slug
+    };
+  }
+  function amFormatSheet(raw) {
+    raw = raw || {};
+    var artist = raw.artist && typeof raw.artist === 'object' ? raw.artist : {};
+    return {
+      worksNum: raw.track_count,
+      id: raw.id,
+      title: raw.title,
+      artist: artist.name || amArtistName(raw.artist),
+      artwork: raw.image || raw.image_base || '',
+      artistItem: {
+        id: artist.id,
+        avatar: artist.image || artist.image_base || '',
+        name: artist.name || '',
+        url_slug: artist.url_slug
+      },
+      url_slug: raw.url_slug
+    };
+  }
+  var amCategoryCache = null;
+  function amLoadCategories() {
+    if (amCategoryCache && amCategoryCache.length) return Promise.resolve(amCategoryCache);
+    return amGet('/playlist/categories', { featured: 'yes', limit: '20', page: '1' }).then(function (data) {
+      var cats = data && data.results && data.results.categories ? data.results.categories : [];
+      amCategoryCache = cats;
+      return cats;
+    });
+  }
+  function amResolveTag(tag) {
+    tag = tag && typeof tag === 'object' ? tag : {};
+    if (!tag.id) {
+      return Promise.resolve({ id: '34', title: "What's New", url_slug: 'whats-new' });
+    }
+    if (tag.url_slug) return Promise.resolve(tag);
+    return amLoadCategories().then(function (cats) {
+      var id = String(tag.id);
+      var title = String(tag.title || '');
+      for (var i = 0; i < cats.length; i++) {
+        if (String(cats[i].id) === id || String(cats[i].title) === title) {
+          return { id: cats[i].id, title: cats[i].title, url_slug: cats[i].url_slug };
+        }
+      }
+      return { id: '34', title: "What's New", url_slug: 'whats-new' };
+    });
+  }
+  function patchAudiomack(instance) {
+    if (!amIsAudiomack(instance)) return;
+    instance.getRecommendSheetTags = function () {
+      return amLoadCategories().then(function (cats) {
+        return { data: [{ data: cats }] };
+      });
+    };
+    instance.getRecommendSheetsByTag = function (tag, page) {
+      page = page || 1;
+      return amResolveTag(tag).then(function (resolved) {
+        return amGet('/playlist/categories', {
+          featured: 'yes',
+          limit: '20',
+          page: String(page),
+          slug: resolved.url_slug
+        }).then(function (data) {
+          var playlists = data && data.results && data.results.playlists ? data.results.playlists : [];
+          return { isEnd: playlists.length < 20, data: playlists.map(amFormatSheet) };
+        });
+      });
+    };
+    instance.getMusicSheetInfo = function (sheet) {
+      var id = sheet && sheet.id != null ? String(sheet.id) : '';
+      if (!id) return Promise.resolve({ isEnd: true, musicList: [] });
+      return amGet('/playlist/' + id, {}).then(function (data) {
+        var raw = data && data.results ? data.results : {};
+        var tracks = Array.isArray(raw.tracks) ? raw.tracks : [];
+        return {
+          isEnd: true,
+          musicList: tracks.map(amFormatMusic).filter(Boolean),
+          sheetItem: amFormatSheet(raw)
+        };
+      });
+    };
+  }
+
+  window.__mfInvoke = function (id, pluginId, method, args) {
+    if (method === 'load') {
+      try {
+        var packed = args;
+        if (!packed || !packed.code) {
+          var nativeLoader = getNative();
+          if (nativeLoader && typeof nativeLoader.takePayload === 'function') {
+            try { packed = JSON.parse(nativeLoader.takePayload(String(id)) || '{}'); } catch (eLoad) { packed = {}; }
+          }
+        }
+        var code = packed && packed.code ? packed.code : '';
+        var vars = {};
+        try { vars = JSON.parse((packed && packed.userVariablesJson) || '{}') || {}; } catch (e) {}
+        var _module = { exports: {} };
+        var env = {
+          getUserVariables: function () { return vars; },
+          get userVariables() { return this.getUserVariables() ?? {}; },
+          appVersion: (packed && packed.appVersion) || '1.0.0',
+          os: (packed && packed.os) || 'android',
+          lang: (packed && packed.lang) || 'zh-CN'
+        };
+        var processObj = { platform: 'android', version: env.appVersion, env: env };
+        var factory = Function('require', '__musicfree_require', 'module', 'exports', 'console', 'env', 'URL', 'process', code);
+        factory(_require, _require, _module, _module.exports, console, env, URL, processObj);
+        var instance = _module.exports && _module.exports.default ? _module.exports.default : _module.exports;
+        patchAudiomack(instance);
+        plugins[pluginId] = instance;
+        var methods = [];
+        if (instance) {
+          ['search','getMediaSource','getMusicInfo','getLyric','getAlbumInfo','getMusicSheetInfo','getArtistWorks','importMusicSheet','importMusicItem','getTopLists','getTopListDetail','getRecommendSheetTags','getRecommendSheetsByTag','getMusicComments'].forEach(function (m) {
+            if (typeof instance[m] === 'function') methods.push(m);
+          });
+        }
+        var userVariables = [];
+        if (instance && Array.isArray(instance.userVariables)) {
+          instance.userVariables = instance.userVariables.filter(function (it) { return it && it.key; });
+          instance.userVariables.forEach(function (it) {
+            userVariables.push({
+              key: it.key,
+              name: it.name != null ? it.name : '',
+              hint: it.hint != null ? it.hint : ''
+            });
+          });
+        }
+        return reply(id, true, {
+          platform: instance && instance.platform ? instance.platform : '',
+          version: instance && instance.version ? instance.version : '',
+          author: instance && instance.author ? instance.author : '',
+          srcUrl: instance && instance.srcUrl ? instance.srcUrl : '',
+          methods: methods,
+          description: (instance && instance.description) || '',
+          cacheControl: (instance && instance.cacheControl) || '',
+          supportedSearchType: (instance && Array.isArray(instance.supportedSearchType)) ? instance.supportedSearchType : [],
+          defaultSearchType: (instance && instance.defaultSearchType) || '',
+          userVariables: userVariables,
+          hints: (instance && instance.hints) || {}
+        });
+      } catch (err) {
+        log('plugin error: ' + (err && err.message ? err.message : String(err)));
+        return reply(id, false, err && err.message ? err.message : String(err));
+      }
+    }
+    if (method === 'unload') {
+      delete plugins[pluginId];
+      return reply(id, true, 'true');
+    }
+    Promise.resolve().then(function () {
+      var inst = plugins[pluginId];
+      if (!inst || typeof inst[method] !== 'function') {
+        throw new Error('方法不存在: ' + method);
+      }
+      var callArgs = Array.isArray(args) ? args : [];
+      return inst[method].apply(inst, callArgs);
+    }).then(function (res) {
+      reply(id, true, res == null ? 'null' : res);
+    }).catch(function (err) {
+      log('plugin error: ' + (err && err.message ? err.message : String(err)));
+      reply(id, false, err && err.message ? err.message : String(err));
+    });
+    return 'pending';
+  };
+  window.__mfReady = true;
+})();
+</script>
+</body>
+</html>

@@ -1,8 +1,7 @@
 import { AppNavBar } from '../components/AppNavBar';
-import { IconImg } from '../components/IconImg';
 import { AppService } from '../core/AppService';
 import { I18n } from '../core/I18n';
-import { abilityAccessCtrl, Permissions } from '@kit.AbilityKit';
+import { abilityAccessCtrl, Permissions, Want } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
 
 @Component
@@ -10,16 +9,23 @@ export struct PermissionsPage {
   @StorageLink('pageBackground') pageBackground: string = '#202020';
   @StorageLink('textColor') textColor: string = '#FCFCFC';
   @StorageLink('textSecondary') textSecondary: string = '#B3FCFCFC';
+  @StorageLink('primary') primary: string = '#3FA3B5';
+  @StorageLink('permPageRev') @Watch('onPermRev') permPageRev: number = 0;
   @State floatGranted: boolean = false;
   @State audioGranted: boolean = false;
   @State bgGranted: boolean = false;
   @StorageLink('appLocale') appLocale: string = 'zh-CN';
+  private opening: boolean = false;
 
   aboutToAppear(): void {
     this.refreshStatus();
   }
 
   onPageShow(): void {
+    this.refreshStatus();
+  }
+
+  onPermRev(): void {
     this.refreshStatus();
   }
 
@@ -44,6 +50,26 @@ export struct PermissionsPage {
     }
   }
 
+  private grantedOf(kind: number): boolean {
+    if (kind === 0) {
+      return this.floatGranted;
+    }
+    if (kind === 1) {
+      return this.audioGranted;
+    }
+    return this.bgGranted;
+  }
+
+  private permissionOf(kind: number): Permissions {
+    if (kind === 0) {
+      return 'ohos.permission.SYSTEM_FLOAT_WINDOW';
+    }
+    if (kind === 1) {
+      return 'ohos.permission.READ_AUDIO';
+    }
+    return 'ohos.permission.KEEP_BACKGROUND_RUNNING';
+  }
+
   private async requestOne(permission: Permissions): Promise<boolean> {
     const ctx = AppService.context;
     if (ctx === null) {
@@ -61,87 +87,105 @@ export struct PermissionsPage {
     return false;
   }
 
-  async requestFloat(): Promise<void> {
-    const ok = await this.requestOne('ohos.permission.SYSTEM_FLOAT_WINDOW');
-    this.refreshStatus();
-    if (!ok || !this.floatGranted) {
-      promptAction.showToast({
-        message: I18n.t('toast.floatDenied'),
-        duration: 2500
-      });
+  private async openAppSettings(): Promise<boolean> {
+    const ctx = AppService.context;
+    if (ctx === null) {
+      return false;
+    }
+    const bundle: string = ctx.abilityInfo.bundleName;
+    const first: Want = {
+      action: 'action.settings.app.info',
+      parameters: {
+        'settingsParamBundleName': bundle
+      }
+    };
+    try {
+      await ctx.startAbility(first);
+      return true;
+    } catch (_e1) {
+    }
+    const second: Want = {
+      bundleName: 'com.huawei.hmos.settings',
+      abilityName: 'com.huawei.hmos.settings.MainAbility',
+      uri: 'application_info_entry',
+      parameters: {
+        'pushParams': bundle
+      }
+    };
+    try {
+      await ctx.startAbility(second);
+      return true;
+    } catch (_e2) {
+    }
+    return false;
+  }
+
+  async handlePerm(kind: number): Promise<void> {
+    if (this.opening) {
       return;
     }
-    promptAction.showToast({ message: I18n.t('toast.floatGranted'), duration: 2000 });
-  }
-
-  async requestAudio(): Promise<void> {
-    const ok = await this.requestOne('ohos.permission.READ_AUDIO');
-    this.refreshStatus();
-    promptAction.showToast({
-      message: ok && this.audioGranted ? I18n.t('toast.audioGranted') : I18n.t('toast.audioDenied'),
-      duration: 2000
-    });
-  }
-
-  async requestBackground(): Promise<void> {
-    const ok = await this.requestOne('ohos.permission.KEEP_BACKGROUND_RUNNING');
-    this.refreshStatus();
-    promptAction.showToast({
-      message: ok && this.bgGranted ? I18n.t('toast.bgGranted') : I18n.t('toast.bgDenied'),
-      duration: 2000
-    });
+    this.opening = true;
+    try {
+      if (this.grantedOf(kind)) {
+        const opened = await this.openAppSettings();
+        if (!opened) {
+          promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.openSettingsFail'), duration: 2500 });
+        }
+        return;
+      }
+      await this.requestOne(this.permissionOf(kind));
+      this.refreshStatus();
+      if (!this.grantedOf(kind)) {
+        const opened = await this.openAppSettings();
+        if (!opened) {
+          promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.openSettingsFail'), duration: 2500 });
+        }
+      }
+    } finally {
+      this.opening = false;
+      this.refreshStatus();
+    }
   }
 
   build() {
     Column() {
       AppNavBar({
-        title: I18n.t('permissionSetting.pageTitle'),
+        title: I18n.tx(this.appLocale, 'permissionSetting.title'),
         onBack: () => {
           AppService.pop();
         }
       })
-      Text(I18n.t('permissionSetting.pageHint'))
+      Text(I18n.tx(this.appLocale, 'permissionSetting.description'))
         .fontSize(13)
         .fontColor(this.textSecondary)
         .width('100%')
-        .padding({ left: 16, right: 16, top: 12, bottom: 8 })
+        .padding({ left: 16, right: 16, top: 16, bottom: 8 })
 
       List() {
         ListItem() {
           this.permRow(
-            'lyric',
-            I18n.t('permissionSetting.floatDesktop'),
-            I18n.t('permissionSetting.floatWindowHint'),
-            this.floatGranted ? I18n.t('permissionSetting.granted') : I18n.t('permissionSetting.notGrantedLimited')
+            0,
+            I18n.tx(this.appLocale, 'permissionSetting.floatWindow'),
+            I18n.tx(this.appLocale, 'permissionSetting.floatWindowHint'),
+            this.floatGranted
           )
         }
-        .onClick(() => {
-          this.requestFloat();
-        })
-
         ListItem() {
           this.permRow(
-            'musical-note',
-            I18n.t('permissionSetting.audioRead'),
-            I18n.t('permissionSetting.importLocalHint'),
-            this.audioGranted ? I18n.t('permissionSetting.granted') : I18n.t('permissionSetting.notGranted')
+            1,
+            I18n.tx(this.appLocale, 'permissionSetting.audio'),
+            I18n.tx(this.appLocale, 'permissionSetting.audioHint'),
+            this.audioGranted
           )
         }
-        .onClick(() => {
-          this.requestAudio();
-        })
-
         ListItem() {
           this.permRow(
-            'play-circle-outline',
-            I18n.t('permissionSetting.background'),
-            I18n.t('permissionSetting.keepPlayingHint'),
-            this.bgGranted ? I18n.t('permissionSetting.granted') : I18n.t('permissionSetting.notGranted')
+            2,
+            I18n.tx(this.appLocale, 'permissionSetting.background'),
+            I18n.tx(this.appLocale, 'permissionSetting.backgroundHint'),
+            this.bgGranted
           )
         }
-        .onClick(() => {
-          this.requestBackground();
-        })
       }
       .width('100%')
       .layoutWeight(1)
@@ -153,9 +197,8 @@ export struct PermissionsPage {
   }
 
   @Builder
-  permRow(icon: string, title: string, desc: string, status: string) {
+  permRow(kind: number, title: string, desc: string, granted: boolean) {
     Row() {
-      IconImg({ name: icon, iconSize: 20, color: this.textColor })
       Column() {
         Text(title)
           .fontSize(15)
@@ -167,13 +210,20 @@ export struct PermissionsPage {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
-      .margin({ left: 12 })
-      Text(status)
-        .fontSize(13)
-        .fontColor(this.textSecondary)
-        .margin({ left: 12 })
+      Toggle({ type: ToggleType.Switch, isOn: granted })
+        .id(`perm-switch-${kind}-${granted}-${this.permPageRev}`)
+        .selectedColor(this.primary)
+        .onChange((on: boolean) => {
+          if (on === this.grantedOf(kind)) {
+            return;
+          }
+          this.handlePerm(kind);
+        })
     }
     .width('100%')
-    .padding(16)
+    .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+    .onClick(() => {
+      this.handlePerm(kind);
+    })
   }
 }

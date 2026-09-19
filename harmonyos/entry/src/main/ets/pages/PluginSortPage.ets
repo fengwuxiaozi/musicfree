@@ -29,19 +29,19 @@ export struct PluginSortPage {
   build() {
     Column() {
       AppNavBar({
-        title: I18n.t('pluginSetting.menu.sort'),
+        title: I18n.tx(this.appLocale, 'pluginSetting.menu.sort'),
         onBack: () => {
           AppService.pop();
         }
       })
 
-      Text(I18n.t('pluginSort.hint'))
+      Text(I18n.tx(this.appLocale, 'pluginSort.hint'))
         .fontSize(12)
         .fontColor(this.textSecondary)
         .padding({ left: 16, right: 16, bottom: 8 })
 
       if (this.plugins.length === 0) {
-        EmptyView({ text: I18n.t('pluginPage.emptyList') })
+        EmptyView({ text: I18n.tx(this.appLocale, 'pluginPage.emptyList') })
       } else {
         List() {
           ForEach(this.plugins, (p: PluginMeta, index: number) => {
@@ -52,7 +52,7 @@ export struct PluginSortPage {
                   .fontColor(this.textSecondary)
                   .width(28)
                 Column() {
-                  Text(p.platform.length > 0 ? p.platform : I18n.t('common.unknownPlugin'))
+                  Text(p.platform.length > 0 ? p.platform : I18n.tx(this.appLocale, 'common.unknownPlugin'))
                     .fontSize(16)
                     .fontColor(this.textColor)
                   Text(p.version.length > 0 ? `v${p.version}` : '')
@@ -83,13 +83,13 @@ export struct PluginSortPage {
         .width('100%')
       }
 
-      Button(I18n.t('common.done'))
+      Button(I18n.tx(this.appLocale, 'common.done'))
         .width('90%')
         .margin({ bottom: 24, top: 8 })
         .backgroundColor(this.primary)
         .fontColor('#FEFEFE')
         .onClick(() => {
-          promptAction.showToast({ message: I18n.t('toast.orderSaved'), duration: 1500 });
+          promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.orderSaved'), duration: 1500 });
           AppService.pop();
         })
     }

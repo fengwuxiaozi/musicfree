@@ -15,11 +15,7 @@ export class UpdateInfo {
  * 检查更新。鸿蒙版没有官方 HAP 商店，发现新版本只提示，不假装能自动安装。
  */
 export class UpdateService {
-  private static URLS: string[] = [
-    'https://gitee.com/maotoumao/MusicFree/raw/master/release/version.json',
-    'https://raw.githubusercontent.com/maotoumao/MusicFree/master/release/version.json',
-    'https://cdn.jsdelivr.net/gh/maotoumao/MusicFree@master/release/version.json'
-  ];
+  private static URLS: string[] = [];
 
   static compareVersion(a: string, b: string): number {
     const pa: string[] = a.split('.');
@@ -41,6 +37,13 @@ export class UpdateService {
   }
 
   static async check(): Promise<UpdateInfo> {
+    if (UpdateService.URLS.length === 0) {
+      const local = new UpdateInfo();
+      local.needUpdate = false;
+      local.failed = false;
+      local.version = APP_VERSION;
+      return local;
+    }
     let lastOk: UpdateInfo | null = null;
     for (let i = 0; i < UpdateService.URLS.length; i++) {
       try {

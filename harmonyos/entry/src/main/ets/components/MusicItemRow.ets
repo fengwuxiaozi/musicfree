@@ -1,5 +1,6 @@
 import { MusicItem } from '../common/Types';
 import { IconImg } from './IconImg';
+import { MusicOptionsSheet } from './MusicOptionsSheet';
 import { AppService } from '../core/AppService';
 import { I18n } from '../core/I18n';
 
@@ -7,58 +8,103 @@ import { I18n } from '../core/I18n';
 export struct MusicItemRow {
   @Prop item: MusicItem = new MusicItem();
   @Prop index: number = 0;
+  @Prop showIndex: boolean = false;
   @Prop parentHandlesMore: boolean = false;
   @Prop parentHandlesPlay: boolean = false;
-  @StorageLink('backdrop') backdrop: string = '#303030';
-  @StorageLink('pageBackground') pageBackground: string = '#202020';
+  @Prop sheetId: string = '';
+  @Prop fromDetail: boolean = false;
   @StorageLink('textColor') textColor: string = '#FCFCFC';
   @StorageLink('textSecondary') textSecondary: string = '#B3FCFCFC';
+  @StorageLink('card') card: string = '#88333333';
+  @StorageLink('divider') divider: string = '#1AFFFFFF';
+  @StorageLink('backdrop') backdrop: string = '#303030';
   @StorageLink('mask') maskColor: string = '#CC212121';
-  @StorageLink('placeholder') placeholder: string = '#424242';
   @StorageLink('appLocale') appLocale: string = 'zh-CN';
+  @StorageLink('downloadTick') downloadTick: number = 0;
   @State showMore: boolean = false;
   onMore: (item: MusicItem) => void = (_item: MusicItem) => {
   };
   onPlay: (item: MusicItem) => void = (_item: MusicItem) => {
   };
+  onTimingClose: () => void = () => {
+  };
+
+  private downloaded(): boolean {
+    return this.downloadTick >= 0 && AppService.isDownloaded(this.item);
+  }
+
+  private descText(): string {
+    if (this.item.album.length > 0) {
+      return `${this.item.artist} - ${this.item.album}`;
+    }
+    return this.item.artist;
+  }
 
   build() {
     Row() {
-      if (this.item.artwork.length > 0) {
-        Image(this.item.artwork)
-          .width(48)
-          .height(48)
-          .borderRadius(6)
-          .objectFit(ImageFit.Cover)
-          .backgroundColor(this.placeholder)
-      } else {
-        Image($r('app.media.album_default'))
-          .width(48)
-          .height(48)
-          .borderRadius(6)
-          .objectFit(ImageFit.Cover)
+      if (this.showIndex) {
+        Text(`${this.index + 1}`)
+          .width(36)
+          .fontSize(14)
+          .fontColor(this.textColor)
+          .fontStyle(FontStyle.Italic)
+          .textAlign(TextAlign.Center)
       }
       Column() {
-        Text(this.item.title.length > 0 ? this.item.title : I18n.t('common.unknownMusic'))
-          .fontSize(15)
-          .fontColor(this.textColor)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(`${this.item.artist}  ·  ${this.item.platform}`)
-          .fontSize(12)
-          .fontColor(this.textSecondary)
-          .margin({ top: 4 })
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Row() {
+          Text(this.item.title.length > 0 ? this.item.title : I18n.tx(this.appLocale, 'common.unknownMusic'))
+            .fontSize(15)
+            .fontColor(this.textColor)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+          if (this.item.platform.length > 0) {
+            Text(this.item.platform)
+              .fontSize(10)
+              .fontColor(this.textColor)
+              .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+              .margin({ left: 6 })
+              .borderRadius(12)
+              .border({ width: 1, color: this.divider })
+              .backgroundColor(this.card)
+              .constraintSize({ maxWidth: 88 })
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+        Row() {
+          if (this.downloaded()) {
+            IconImg({ name: 'check-circle', iconSize: 11, color: '#11659A' })
+              .margin({ right: 4 })
+          }
+          Text(this.descText())
+            .fontSize(12)
+            .fontColor(this.textSecondary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .margin({ top: 6 })
+        .alignItems(VerticalAlign.Center)
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
-      .margin({ left: 12 })
+      .margin({ left: this.showIndex ? 0 : 4 })
+      .onClick(() => {
+        if (this.parentHandlesPlay) {
+          this.onPlay(this.item);
+        } else {
+          AppService.player.playMusic(this.item);
+        }
+      })
 
       Row() {
-        IconImg({ name: 'ellipsis-vertical', iconSize: 20, color: this.textSecondary })
+        IconImg({ name: 'ellipsis-vertical', iconSize: 18, color: this.textColor })
       }
-      .width(36)
+      .width(24)
       .height(36)
       .justifyContent(FlexAlign.Center)
       .onClick(() => {
@@ -70,80 +116,29 @@ export struct MusicItemRow {
       })
     }
     .width('100%')
-    .padding({ left: 16, right: 8, top: 8, bottom: 8 })
-    .onClick(() => {
-      if (this.parentHandlesPlay) {
-        this.onPlay(this.item);
-      } else {
-        AppService.player.playMusic(this.item);
-      }
-    })
+    .height(60)
+    .padding({ left: 12, right: 12 })
     .bindSheet($$this.showMore, this.moreBuilder(), {
-      height: 280,
+      height: SheetSize.LARGE,
       showClose: false,
-      backgroundColor: this.backdrop.length > 0 ? this.backdrop : this.pageBackground,
-      maskColor: this.maskColor
+      backgroundColor: this.backdrop,
+      maskColor: this.maskColor,
+      blurStyle: BlurStyle.NONE
     })
-  }
-
-  @Builder
-  sheetHeader() {
-    Row() {
-      Text(this.item.title.length > 0 ? this.item.title : I18n.t('common.unknownMusic'))
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.textColor)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-      Row() {
-        IconImg({ name: 'x-mark', iconSize: 18, color: this.textSecondary })
-      }
-      .width(36)
-      .height(36)
-      .justifyContent(FlexAlign.Center)
-      .onClick(() => {
-        this.showMore = false;
-      })
-    }
-    .width('100%')
-    .height(48)
-    .padding({ left: 16, right: 8 })
   }
 
   @Builder
   moreBuilder() {
-    Column() {
-      this.sheetHeader()
-      Column() {
-        this.moreRow('motion-play', I18n.t('musicListEditor.addToNextPlay'), () => {
-          AppService.player.addNext(this.item);
-          this.showMore = false;
-        })
-        this.moreRow('heart-outline', I18n.t('common.addToFavorite'), () => {
-          AppService.sheets.toggleFavorite(this.item);
-          this.showMore = false;
-        })
-        this.moreRow('arrow-down-tray', I18n.t('common.download'), () => {
-          AppService.downloader.download(this.item);
-          this.showMore = false;
-        })
+    MusicOptionsSheet({
+      item: this.item,
+      sheetId: this.sheetId,
+      fromDetail: this.fromDetail,
+      onClose: () => {
+        this.showMore = false;
+      },
+      onTimingClose: () => {
+        this.onTimingClose();
       }
-      .width('100%')
-      .padding({ left: 12, right: 12, bottom: 12 })
-    }
-    .width('100%')
-    .backgroundColor(this.backdrop.length > 0 ? this.backdrop : this.pageBackground)
-  }
-
-  @Builder
-  moreRow(icon: string, title: string, action: () => void) {
-    Row() {
-      IconImg({ name: icon, iconSize: 20, color: this.textColor })
-      Text(title).fontSize(15).fontColor(this.textColor).margin({ left: 12 })
-    }
-    .width('100%')
-    .height(48)
-    .onClick(action)
+    })
   }
 }

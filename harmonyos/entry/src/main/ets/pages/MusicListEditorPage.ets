@@ -28,6 +28,7 @@ export struct MusicListEditorPage {
   @State editorSheetId: string = '';
   @State showSheets: boolean = false;
   @State sheetOptions: SheetItem[] = [];
+  @State rowsRev: number = 0;
   @StorageLink('appLocale') appLocale: string = 'zh-CN';
 
   aboutToAppear(): void {
@@ -87,6 +88,7 @@ export struct MusicListEditorPage {
 
   private replaceRows(rows: EditorRow[]): void {
     this.rows = rows;
+    this.rowsRev += 1;
   }
 
   private copyRows(checked: boolean): EditorRow[] {
@@ -131,13 +133,12 @@ export struct MusicListEditorPage {
     if (this.editorSheetId === HISTORY_SHEET_ID) {
       AppService.history.replaceAll(list);
     } else if (this.editorSheetId === LOCAL_SHEET_ID) {
-      AppService.localMusics = list;
-      AppService.saveLocalMusics();
+      AppService.replaceLocalMusics(list);
     } else {
       AppService.sheets.replaceMusics(this.editorSheetId, list);
     }
     this.changed = false;
-    showToast(I18n.t('toast.saveSuccess'));
+    showToast(I18n.tx(this.appLocale, 'toast.saveSuccess'));
     AppService.pop();
   }
 
@@ -167,7 +168,7 @@ export struct MusicListEditorPage {
     AppService.sheets.addMusics(sheet.id, items);
     this.showSheets = false;
     this.clearChecked();
-    showToast(I18n.t('toast.addedToSheet'));
+    showToast(I18n.tx(this.appLocale, 'toast.addedToSheet'));
   }
 
   private downloadSelected(): void {
@@ -195,25 +196,26 @@ export struct MusicListEditorPage {
     }
     this.replaceRows(next);
     this.changed = true;
+    showToast(I18n.tx(this.appLocale, 'toast.rememberToSave'));
   }
 
   build() {
     Column() {
       AppNavBar({
-        title: this.editorTitle.length > 0 ? this.editorTitle : I18n.t('common.batchEdit'),
+        title: this.editorTitle.length > 0 ? this.editorTitle : I18n.tx(this.appLocale, 'common.batchEdit'),
         onBack: () => {
           AppService.pop();
         }
       })
       Row() {
-        Text(this.allSelected() ? I18n.t('musicListEditor.unselectAllCount').replace('{count}', `${this.selectedCount()}`) : I18n.t('musicListEditor.selectAllCount').replace('{count}', `${this.selectedCount()}`))
+        Text(this.allSelected() ? I18n.tx(this.appLocale, 'musicListEditor.unselectAllCount').replace('{count}', `${this.selectedCount()}`) : I18n.tx(this.appLocale, 'musicListEditor.selectAllCount').replace('{count}', `${this.selectedCount()}`))
           .fontSize(13)
           .fontColor(this.primary)
           .onClick(() => {
             this.toggleSelectAll();
           })
         Blank()
-        Text(I18n.t('common.save'))
+        Text(I18n.tx(this.appLocale, 'common.save'))
           .fontSize(13)
           .fontColor(this.canSave() ? this.primary : this.textSecondary)
           .onClick(() => {
@@ -226,7 +228,7 @@ export struct MusicListEditorPage {
       .alignItems(VerticalAlign.Center)
 
       if (this.rows.length === 0) {
-        EmptyView({ text: I18n.t('musicListEditor.empty') })
+        EmptyView({ text: I18n.tx(this.appLocale, 'musicListEditor.empty') })
       } else {
         List() {
           ForEach(this.rows, (row: EditorRow, index: number) => {
@@ -240,12 +242,12 @@ export struct MusicListEditorPage {
                   .height(20)
                   .hitTestBehavior(HitTestMode.None)
                 Column() {
-                  Text(row.item.title.length > 0 ? row.item.title : I18n.t('common.unknownMusic'))
+                  Text(row.item.title.length > 0 ? row.item.title : I18n.tx(this.appLocale, 'common.unknownMusic'))
                     .fontSize(15)
                     .fontColor(this.textColor)
                     .maxLines(1)
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  Text(row.item.artist.length > 0 ? row.item.artist : I18n.t('common.unknownArtist'))
+                  Text(row.item.artist.length > 0 ? row.item.artist : I18n.tx(this.appLocale, 'common.unknownArtist'))
                     .fontSize(12)
                     .fontColor(this.textSecondary)
                     .margin({ top: 4 })
@@ -262,7 +264,7 @@ export struct MusicListEditorPage {
                 this.toggleAt(index);
               })
             }
-          }, (row: EditorRow, index: number) => `${row.item.key()}-${index}-${row.checked ? '1' : '0'}`)
+          }, (row: EditorRow, index: number) => `${this.rowsRev}-${row.item.key()}-${index}-${row.checked ? '1' : '0'}`)
         }
         .layoutWeight(1)
         .width('100%')
@@ -270,16 +272,16 @@ export struct MusicListEditorPage {
       }
 
       Row() {
-        this.bottomBtn('motion-play', I18n.t('musicListEditor.addToNextPlay'), true, () => {
+        this.bottomBtn('motion-play', I18n.tx(this.appLocale, 'musicListEditor.addToNextPlay'), true, () => {
           this.playNext();
         })
-        this.bottomBtn('folder-plus', I18n.t('musicListEditor.addToSheet'), true, () => {
+        this.bottomBtn('folder-plus', I18n.tx(this.appLocale, 'musicListEditor.addToSheet'), true, () => {
           this.openSheets();
         })
-        this.bottomBtn('arrow-down-tray', I18n.t('common.download'), true, () => {
+        this.bottomBtn('arrow-down-tray', I18n.tx(this.appLocale, 'common.download'), true, () => {
           this.downloadSelected();
         })
-        this.bottomBtn('trash-outline', I18n.t('common.delete'), this.canDelete(), () => {
+        this.bottomBtn('trash-outline', I18n.tx(this.appLocale, 'common.delete'), this.canDelete(), () => {
           this.deleteSelected();
         })
       }
@@ -322,7 +324,7 @@ export struct MusicListEditorPage {
   sheetPicker() {
     Column() {
       Row() {
-        Text(I18n.t('musicListEditor.addToSheet'))
+        Text(I18n.tx(this.appLocale, 'musicListEditor.addToSheet'))
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.textColor)
@@ -341,7 +343,7 @@ export struct MusicListEditorPage {
       .height(48)
       .padding({ left: 16, right: 8 })
       if (this.sheetOptions.length === 0) {
-        Text(I18n.t('musicListEditor.noSheets'))
+        Text(I18n.tx(this.appLocale, 'musicListEditor.noSheets'))
           .fontSize(14)
           .fontColor(this.textSecondary)
           .margin({ top: 24 })
@@ -349,7 +351,7 @@ export struct MusicListEditorPage {
         List() {
           ForEach(this.sheetOptions, (sheet: SheetItem) => {
             ListItem() {
-              Text(sheet.title.length > 0 ? sheet.title : I18n.t('common.unknownName'))
+              Text(sheet.title.length > 0 ? sheet.title : I18n.tx(this.appLocale, 'common.unknownName'))
                 .fontSize(15)
                 .fontColor(this.textColor)
                 .padding(14)

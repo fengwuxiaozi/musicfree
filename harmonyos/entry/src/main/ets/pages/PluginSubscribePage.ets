@@ -33,14 +33,15 @@ export struct PluginSubscribePage {
   }
 
   private validUrl(url: string): boolean {
-    return url.endsWith('.js') || url.endsWith('.json');
+    const lower = url.trim().toLowerCase();
+    return lower.startsWith('http://') || lower.startsWith('https://');
   }
 
   private submit(): void {
-    const name = this.nameInput.trim().length > 0 ? this.nameInput.trim() : I18n.t('pluginSubscribe.defaultName');
+    const name = this.nameInput.trim().length > 0 ? this.nameInput.trim() : I18n.tx(this.appLocale, 'pluginSubscribe.defaultName');
     const url = this.urlInput.trim();
     if (!this.validUrl(url)) {
-      promptAction.showToast({ message: I18n.t('toast.subscriptionHaveToEndWithJs'), duration: 2000 });
+      promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.subscriptionHaveToEndWithJs'), duration: 2000 });
       return;
     }
     if (this.editing >= 0) {
@@ -54,7 +55,7 @@ export struct PluginSubscribePage {
 
   async updateAll(): Promise<void> {
     if (this.items.length === 0) {
-      promptAction.showToast({ message: I18n.t('toast.noSubscription'), duration: 2000 });
+      promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.noSubscription'), duration: 2000 });
       return;
     }
     this.updating = true;
@@ -62,7 +63,7 @@ export struct PluginSubscribePage {
       const msg = await AppService.plugins.updateFromSubscribe();
       promptAction.showToast({ message: msg, duration: 2500 });
     } catch (e) {
-      promptAction.showToast({ message: e instanceof Error ? e.message : I18n.t('toast.updateSubscribeFail'), duration: 2500 });
+      promptAction.showToast({ message: e instanceof Error ? e.message : I18n.tx(this.appLocale, 'toast.updateSubscribeFail'), duration: 2500 });
     }
     this.updating = false;
   }
@@ -72,30 +73,31 @@ export struct PluginSubscribePage {
       const board = pasteboard.getSystemPasteboard();
       const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, url);
       board.setData(data);
-      promptAction.showToast({ message: I18n.t('toast.linkCopied'), duration: 1500 });
+      promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.linkCopied'), duration: 1500 });
     } catch (_e) {
       promptAction.showToast({ message: url, duration: 2000 });
     }
   }
 
   build() {
-    Column() {
-      AppNavBar({
-        title: I18n.t('pluginSetting.menu.subscriptionSetting'),
-        onBack: () => {
-          AppService.pop();
-        }
-      })
+    Stack() {
+      Column() {
+        AppNavBar({
+          title: I18n.tx(this.appLocale, 'pluginSetting.menu.subscriptionSetting'),
+          onBack: () => {
+            AppService.pop();
+          }
+        })
 
       Row() {
-        Button(this.updating ? I18n.t('pluginSubscribe.updating') : I18n.t('pluginSetting.fabOptions.updateSubscription'))
+        Button(this.updating ? I18n.tx(this.appLocale, 'pluginSubscribe.updating') : I18n.tx(this.appLocale, 'pluginSetting.fabOptions.updateSubscription'))
           .backgroundColor(this.primary)
           .fontColor('#FEFEFE')
           .enabled(!this.updating)
           .onClick(() => {
             this.updateAll();
           })
-        Button(I18n.t('pluginSubscribe.add'))
+        Button(I18n.tx(this.appLocale, 'pluginSubscribe.add'))
           .margin({ left: 12 })
           .backgroundColor(this.placeholder)
           .fontColor(this.textColor)
@@ -109,13 +111,13 @@ export struct PluginSubscribePage {
       .width('100%')
       .padding({ left: 16, right: 16, bottom: 8 })
 
-      Text(I18n.t('pluginSubscribe.hint'))
+      Text(I18n.tx(this.appLocale, 'pluginSubscribe.hint'))
         .fontSize(12)
         .fontColor(this.textSecondary)
         .padding({ left: 16, right: 16, bottom: 8 })
 
       if (this.items.length === 0) {
-        EmptyView({ text: I18n.t('pluginSubscribe.empty') })
+        EmptyView({ text: I18n.tx(this.appLocale, 'pluginSubscribe.empty') })
       } else {
         List() {
           ForEach(this.items, (item: PluginSubscribeItem, index: number) => {
@@ -149,7 +151,7 @@ export struct PluginSubscribePage {
                   .onClick(() => {
                     AppService.plugins.removeSubscribe(index);
                     this.reload();
-                    promptAction.showToast({ message: I18n.t('toast.deleted'), duration: 1500 });
+                    promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.deleted'), duration: 1500 });
                   })
               }
               .width('100%')
@@ -164,20 +166,36 @@ export struct PluginSubscribePage {
     .width('100%')
     .height('100%')
     .backgroundColor(this.pageBackground)
-    .bindSheet($$this.showAdd, this.addBuilder(), {
-      height: 320,
-      showClose: false,
-      backgroundColor: this.backdrop,
-      blurStyle: BlurStyle.NONE,
-      maskColor: this.maskColor
-    })
+
+      if (this.showAdd) {
+        this.addOverlay()
+      }
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  addOverlay() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.maskColor)
+        .onClick(() => {
+          this.showAdd = false;
+        })
+      this.addBuilder()
+    }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder
   addBuilder() {
     Column() {
       Row() {
-        Text(this.editing >= 0 ? I18n.t('pluginSubscribe.edit') : I18n.t('pluginSubscribe.add'))
+        Text(this.editing >= 0 ? I18n.tx(this.appLocale, 'pluginSubscribe.edit') : I18n.tx(this.appLocale, 'pluginSubscribe.add'))
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.textColor)
@@ -195,7 +213,7 @@ export struct PluginSubscribePage {
       .width('100%')
       .height(48)
       .padding({ left: 16, right: 8 })
-      TextInput({ placeholder: I18n.t('pluginSubscribe.namePlaceholder'), text: this.nameInput })
+      TextInput({ placeholder: I18n.tx(this.appLocale, 'pluginSubscribe.namePlaceholder'), text: this.nameInput })
         .fontColor(this.textColor)
         .placeholderColor(this.textSecondary)
         .backgroundColor(this.placeholder)
@@ -204,7 +222,7 @@ export struct PluginSubscribePage {
           this.nameInput = v;
         })
         .margin({ left: 16, right: 16, top: 12 })
-      TextInput({ placeholder: I18n.t('pluginSubscribe.urlPlaceholder'), text: this.urlInput })
+      TextInput({ placeholder: I18n.tx(this.appLocale, 'pluginSubscribe.urlPlaceholder'), text: this.urlInput })
         .fontColor(this.textColor)
         .placeholderColor(this.textSecondary)
         .backgroundColor(this.placeholder)
@@ -213,7 +231,7 @@ export struct PluginSubscribePage {
           this.urlInput = v;
         })
         .margin({ left: 16, right: 16, top: 12 })
-      Button(I18n.t('common.save'))
+      Button(I18n.tx(this.appLocale, 'common.save'))
         .width('90%')
         .margin({ top: 16 })
         .backgroundColor(this.primary)
@@ -223,7 +241,10 @@ export struct PluginSubscribePage {
         })
     }
     .width('100%')
-    .height('100%')
+    .padding({ bottom: 24 })
+    .borderRadius({ topLeft: 16, topRight: 16 })
     .backgroundColor(this.backdrop)
+    .onClick(() => {
+    })
   }
 }

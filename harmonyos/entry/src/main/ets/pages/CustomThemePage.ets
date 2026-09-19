@@ -27,9 +27,9 @@ export struct CustomThemePage {
         return;
       }
       await AppService.theme.setBackgroundFromUri(result.photoUris[0]);
-      promptAction.showToast({ message: I18n.t('toast.backgroundSet'), duration: 1500 });
+      promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.backgroundSet'), duration: 1500 });
     } catch (_e) {
-      promptAction.showToast({ message: I18n.t('toast.pickImageFail'), duration: 2000 });
+      promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.pickImageFail'), duration: 2000 });
     }
   }
 
@@ -44,20 +44,20 @@ export struct CustomThemePage {
         return;
       }
       await AppService.theme.setBackgroundFromUri(uris[0]);
-      promptAction.showToast({ message: I18n.t('toast.backgroundSet'), duration: 1500 });
+      promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.backgroundSet'), duration: 1500 });
     } catch (_e) {
-      promptAction.showToast({ message: I18n.t('toast.pickFileFail'), duration: 2000 });
+      promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.pickFileFail'), duration: 2000 });
     }
   }
 
   async clearBg(): Promise<void> {
     await AppService.theme.clearBackground();
-    promptAction.showToast({ message: I18n.t('toast.backgroundCleared'), duration: 1500 });
+    promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.backgroundCleared'), duration: 1500 });
   }
 
   build() {
     Column() {
-      AppNavBar({ title: I18n.t('setCustomTheme.customizeBackground'), onBack: () => { AppService.pop(); } })
+      AppNavBar({ title: I18n.tx(this.appLocale, 'setCustomTheme.customizeBackground'), onBack: () => { AppService.pop(); } })
       Scroll() {
         Column() {
           if (this.bgUrl.length > 0) {
@@ -73,7 +73,7 @@ export struct CustomThemePage {
               })
           } else {
             Column() {
-              Text(I18n.t('setCustomTheme.clickToChoose'))
+              Text(I18n.tx(this.appLocale, 'setCustomTheme.clickToChoose'))
                 .fontSize(14)
                 .fontColor(this.textSecondary)
             }
@@ -89,14 +89,14 @@ export struct CustomThemePage {
           }
 
           Row() {
-            Button(I18n.t('setCustomTheme.fromAlbum'))
+            Button(I18n.tx(this.appLocale, 'setCustomTheme.fromAlbum'))
               .backgroundColor(this.primary)
               .fontColor('#FEFEFE')
               .layoutWeight(1)
               .onClick(() => {
                 this.pickPhoto();
               })
-            Button(I18n.t('setCustomTheme.fromFile'))
+            Button(I18n.tx(this.appLocale, 'setCustomTheme.fromFile'))
               .backgroundColor(this.primary)
               .fontColor('#FEFEFE')
               .layoutWeight(1)
@@ -108,7 +108,7 @@ export struct CustomThemePage {
           .width('90%')
           .margin({ top: 20 })
 
-          Button(I18n.t('setCustomTheme.clearBackground'))
+          Button(I18n.tx(this.appLocale, 'setCustomTheme.clearBackground'))
             .width('90%')
             .margin({ top: 12 })
             .backgroundColor(this.placeholder)
@@ -118,7 +118,7 @@ export struct CustomThemePage {
             })
 
           Row() {
-            Text(I18n.t('setCustomTheme.blur'))
+            Text(I18n.tx(this.appLocale, 'setCustomTheme.blur'))
               .fontSize(14)
               .fontColor(this.textColor)
               .width(64)
@@ -143,7 +143,7 @@ export struct CustomThemePage {
           .margin({ top: 28 })
 
           Row() {
-            Text(I18n.t('setCustomTheme.opacity'))
+            Text(I18n.tx(this.appLocale, 'setCustomTheme.opacity'))
               .fontSize(14)
               .fontColor(this.textColor)
               .width(64)

@@ -1,0 +1,9 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "MusicFree entry module",
+  "main": "",
+  "author": "疯舞小子",
+  "license": "AGPL-3.0",
+  "dependencies": {}
+}

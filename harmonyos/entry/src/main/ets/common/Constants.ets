@@ -1,5 +1,5 @@
 export const APP_NAME: string = 'MusicFree';
-export const APP_VERSION: string = '0.6.2';
+export const APP_VERSION: string = '1.0.0';
 export const LOCAL_PLATFORM: string = '本地';
 export const FAVORITE_SHEET_ID: string = 'favorite';
 export const HISTORY_SHEET_ID: string = 'history';
@@ -15,11 +15,14 @@ export class STORE_KEYS {
   static readonly duration: string = 'duration';
   static readonly lyricLine: string = 'lyricLine';
   static readonly hasMusic: string = 'hasMusic';
+  static readonly playQuality: string = 'playQuality';
+  static readonly playRate: string = 'playRate';
   static readonly themeDark: string = 'themeDark';
   static readonly primary: string = 'primary';
   static readonly pageBackground: string = 'pageBackground';
   static readonly textColor: string = 'textColor';
   static readonly textSecondary: string = 'textSecondary';
+  static readonly textHint: string = 'textHint';
   static readonly appBar: string = 'appBar';
   static readonly appBarText: string = 'appBarText';
   static readonly musicBar: string = 'musicBar';
@@ -36,6 +39,9 @@ export class STORE_KEYS {
   static readonly bgUrl: string = 'bgUrl';
   static readonly bgBlur: string = 'bgBlur';
   static readonly bgOpacity: string = 'bgOpacity';
+  static readonly themeRev: string = 'themeRev';
+  static readonly localeRev: string = 'localeRev';
+  static readonly lyricTick: string = 'lyricTick';
 }
 
 export class ROUTES {
@@ -64,6 +70,8 @@ export class ROUTES {
   static readonly MUSIC_LIST_EDITOR: string = 'music-list-editor';
   static readonly SEARCH_MUSIC_LIST: string = 'search-music-list';
   static readonly PERMISSIONS: string = 'permissions';
+  static readonly MUSIC_COMMENT: string = 'music-comment';
+  static readonly IMPORT_SHEET: string = 'import-sheet';
 }
 
 export const WEBDAV_DIR: string = '/MusicFree';
@@ -80,6 +88,7 @@ export enum RepeatMode {
 
 export enum ResumeMode {
   APPEND = 'append',
+  OVERWRITE_DEFAULT = 'overwrite-default',
   OVERWRITE = 'overwrite'
 }
 

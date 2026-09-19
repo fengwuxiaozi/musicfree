@@ -1,0 +1,12 @@
+{
+  "modelVersion": "26.0.0",
+  "name": "musicfree",
+  "version": "1.0.0",
+  "description": "MusicFree HarmonyOS NEXT",
+  "main": "",
+  "author": "疯舞小子",
+  "license": "AGPL-3.0",
+  "dependencies": {},
+  "devDependencies": {},
+  "dynamicDependencies": {}
+}

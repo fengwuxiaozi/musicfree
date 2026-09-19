@@ -1,14 +1,11 @@
-import { ROUTES, APP_VERSION, ResumeMode, QUALITIES } from '../common/Constants';
+import { ROUTES, APP_VERSION, ResumeMode, STORE_KEYS } from '../common/Constants';
 import { AppNavBar } from '../components/AppNavBar';
 import { IconImg } from '../components/IconImg';
 import { AppService } from '../core/AppService';
-import { AppConfig, KEYS } from '../core/AppConfig';
 import { AppStorageUtil } from '../core/AppStorageUtil';
-import { FloatingLyric } from '../core/FloatingLyric';
 import { I18n } from '../core/I18n';
 import { UpdateService } from '../core/UpdateService';
 import { WebDavService } from '../core/WebDavService';
-import { MediaCache } from '../core/MediaCache';
 import { HttpUtil } from '../core/HttpUtil';
 import { picker } from '@kit.CoreFileKit';
 import { promptAction } from '@kit.ArkUI';
@@ -21,13 +18,13 @@ export struct SettingPage {
 
   build() {
     Column() {
-      AppNavBar({ title: I18n.t('common.setting'), onBack: () => { AppService.pop(); } })
-      this.item('cog-8-tooth', I18n.t('sidebar.basicSettings'), () => { AppService.push(ROUTES.BASIC); })
-      this.item('javascript', I18n.t('sidebar.pluginManagement'), () => { AppService.push(ROUTES.PLUGIN); })
-      this.item('t-shirt-outline', I18n.t('sidebar.themeSettings'), () => { AppService.push(ROUTES.THEME); })
-      this.item('circle-stack', I18n.t('sidebar.backupAndResume'), () => { AppService.push(ROUTES.BACKUP); })
-      this.item('information-circle', I18n.t('common.about'), () => { AppService.push(ROUTES.ABOUT); })
-      this.item('shield-keyhole-outline', I18n.t('sidebar.permissionManagement'), () => { AppService.push(ROUTES.PERMISSIONS); })
+      AppNavBar({ title: I18n.tx(this.appLocale, 'common.setting'), onBack: () => { AppService.pop(); } })
+      this.item('cog-8-tooth', I18n.tx(this.appLocale, 'sidebar.basicSettings'), () => { AppService.push(ROUTES.BASIC); })
+      this.item('javascript', I18n.tx(this.appLocale, 'sidebar.pluginManagement'), () => { AppService.push(ROUTES.PLUGIN); })
+      this.item('t-shirt-outline', I18n.tx(this.appLocale, 'sidebar.themeSettings'), () => { AppService.push(ROUTES.THEME); })
+      this.item('circle-stack', I18n.tx(this.appLocale, 'sidebar.backupAndResume'), () => { AppService.push(ROUTES.BACKUP); })
+      this.item('information-circle', I18n.tx(this.appLocale, 'common.about'), () => { AppService.push(ROUTES.ABOUT); })
+      this.item('shield-keyhole-outline', I18n.tx(this.appLocale, 'sidebar.permissionManagement'), () => { AppService.push(ROUTES.PERMISSIONS); })
     }
     .id(`setting-${this.appLocale}`)
     .width('100%')
@@ -49,258 +46,6 @@ export struct SettingPage {
 }
 
 @Component
-export struct BasicSettingPage {
-  @StorageLink('pageBackground') pageBackground: string = '#202020';
-  @StorageLink('textColor') textColor: string = '#FCFCFC';
-  @StorageLink('textSecondary') textSecondary: string = '#B3FCFCFC';
-  @StorageLink('primary') primary: string = '#3FA3B5';
-  @StorageLink('appLocale') appLocale: string = 'zh-CN';
-  @State autoPlay: boolean = false;
-  @State tryChangeSource: boolean = true;
-  @State playQuality: string = 'standard';
-  @State downloadQuality: string = 'standard';
-  @State clickSearch: string = 'playMusic';
-  @State autoUpdatePlugin: boolean = false;
-  @State autoSearchLyric: boolean = false;
-  @State desktopLyric: boolean = false;
-  @State maxHistoryLen: number = 300;
-  @State autoStopError: boolean = false;
-  @State maxDownload: number = 3;
-  @State clickAlbum: string = 'playAlbum';
-  @State detailDefault: string = 'album';
-
-  aboutToAppear(): void {
-    this.reload();
-  }
-
-  async reload(): Promise<void> {
-    await AppConfig.load();
-    this.autoPlay = AppConfig.getBool(KEYS.AUTO_PLAY, false);
-    this.tryChangeSource = AppConfig.getBool(KEYS.TRY_CHANGE_SOURCE, true);
-    this.playQuality = AppConfig.getString(KEYS.PLAY_QUALITY, 'standard');
-    this.downloadQuality = AppConfig.getString(KEYS.DOWNLOAD_QUALITY, 'standard');
-    this.clickSearch = AppConfig.getString(KEYS.CLICK_SEARCH, 'playMusic');
-    this.autoUpdatePlugin = AppConfig.getBool(KEYS.AUTO_UPDATE_PLUGIN, false);
-    this.autoSearchLyric = AppConfig.getBool(KEYS.AUTO_SEARCH_LYRIC, false);
-    this.maxHistoryLen = AppConfig.getNumber(KEYS.MAX_HISTORY, 300);
-    this.desktopLyric = FloatingLyric.isEnabled();
-    this.autoStopError = AppConfig.getBool(KEYS.AUTO_STOP_ERROR, false);
-    this.maxDownload = AppConfig.getNumber(KEYS.MAX_DOWNLOAD, 3);
-    this.clickAlbum = AppConfig.getString(KEYS.CLICK_ALBUM, 'playAlbum');
-    this.detailDefault = AppConfig.getString(KEYS.DETAIL_DEFAULT, 'album');
-    AppService.player.quality = this.playQuality;
-    AppService.history.maxLength = this.maxHistoryLen;
-  }
-
-  private nextIn(list: string[], current: string): string {
-    const idx = list.indexOf(current);
-    return list[(idx + 1) % list.length];
-  }
-
-  private nextHistory(): number {
-    const list: number[] = [50, 100, 200, 300, 500];
-    let idx = -1;
-    for (let i = 0; i < list.length; i++) {
-      if (list[i] === this.maxHistoryLen) {
-        idx = i;
-        break;
-      }
-    }
-    return list[(idx + 1) % list.length];
-  }
-
-  private clickSearchLabel(): string {
-    return this.clickSearch === 'playMusicAndReplace' ?
-      I18n.t('basicSettings.clickMusicInSearch.playMusicAndReplace') :
-      I18n.t('basicSettings.clickMusicInSearch.playMusic');
-  }
-
-  private clickAlbumLabel(): string {
-    return this.clickAlbum === 'playMusic' ?
-      I18n.t('basicSettings.clickMusicInAlbum.playMusic') :
-      I18n.t('basicSettings.clickMusicInAlbum.playAlbum');
-  }
-
-  private detailDefaultLabel(): string {
-    return this.detailDefault === 'lyric' ?
-      I18n.t('basicSettings.musicDetailDefault.lyric') :
-      I18n.t('basicSettings.musicDetailDefault.album');
-  }
-
-  private qualityLabel(q: string): string {
-    if (q === 'low') {
-      return I18n.t('musicQuality.low');
-    }
-    if (q === 'high') {
-      return I18n.t('musicQuality.high');
-    }
-    if (q === 'super') {
-      return I18n.t('musicQuality.super');
-    }
-    return I18n.t('musicQuality.standard');
-  }
-
-  private nextDownload(): number {
-    const list: number[] = [1, 3, 5];
-    let idx = -1;
-    for (let i = 0; i < list.length; i++) {
-      if (list[i] === this.maxDownload) {
-        idx = i;
-        break;
-      }
-    }
-    return list[(idx + 1) % list.length];
-  }
-
-  build() {
-    Column() {
-      AppNavBar({ title: I18n.t('sidebar.basicSettings'), onBack: () => { AppService.pop(); } })
-      Scroll() {
-        Column() {
-          this.valueRow(I18n.t('basicSettings.language'), I18n.localeLabel(I18n.locale()), () => {
-            const locales: string[] = ['zh-CN', 'zh-TW', 'en-US'];
-            const next: string = this.nextIn(locales, I18n.locale());
-            I18n.setLocale(next);
-          })
-          this.sectionTitle(I18n.t('basicSettings.playback'))
-          this.switchRow(I18n.t('basicSettings.autoPlayWhenAppStart'), I18n.t('basicSettings.autoPlayWhenAppStartHint'), this.autoPlay, (on: boolean) => {
-            this.autoPlay = on;
-            AppConfig.setBool(KEYS.AUTO_PLAY, on);
-          })
-          this.switchRow(I18n.t('basicSettings.tryChangeSourceWhenPlayFail'), '', this.tryChangeSource, (on: boolean) => {
-            this.tryChangeSource = on;
-            AppConfig.setBool(KEYS.TRY_CHANGE_SOURCE, on);
-          })
-          this.switchRow(I18n.t('basicSettings.autoStopWhenError'), '', this.autoStopError, (on: boolean) => {
-            this.autoStopError = on;
-            AppConfig.setBool(KEYS.AUTO_STOP_ERROR, on);
-          })
-          this.valueRow(I18n.t('basicSettings.defaultPlayQuality'), this.qualityLabel(this.playQuality), () => {
-            const next = this.nextIn(QUALITIES, this.playQuality);
-            this.playQuality = next;
-            AppConfig.setString(KEYS.PLAY_QUALITY, next);
-            AppService.player.quality = next;
-            promptAction.showToast({ message: I18n.t('basicSettings.qualityToast').replace('{quality}', this.qualityLabel(next)), duration: 1500 });
-          })
-          this.valueRow(I18n.t('basicSettings.clickMusicInSearch'), this.clickSearchLabel(), () => {
-            const next = this.clickSearch === 'playMusic' ? 'playMusicAndReplace' : 'playMusic';
-            this.clickSearch = next;
-            AppConfig.setString(KEYS.CLICK_SEARCH, next);
-          })
-          this.valueRow(I18n.t('basicSettings.clickMusicInAlbum'), this.clickAlbumLabel(), () => {
-            const next = this.clickAlbum === 'playMusic' ? 'playAlbum' : 'playMusic';
-            this.clickAlbum = next;
-            AppConfig.setString(KEYS.CLICK_ALBUM, next);
-          })
-          this.valueRow(I18n.t('basicSettings.musicDetailDefault'), this.detailDefaultLabel(), () => {
-            const next = this.detailDefault === 'album' ? 'lyric' : 'album';
-            this.detailDefault = next;
-            AppConfig.setString(KEYS.DETAIL_DEFAULT, next);
-          })
-
-          this.sectionTitle(I18n.t('basicSettings.download'))
-          this.valueRow(I18n.t('basicSettings.defaultDownloadQuality'), this.qualityLabel(this.downloadQuality), () => {
-            const next = this.nextIn(QUALITIES, this.downloadQuality);
-            this.downloadQuality = next;
-            AppConfig.setString(KEYS.DOWNLOAD_QUALITY, next);
-          })
-          this.valueRow(I18n.t('basicSettings.maxDownload'), `${this.maxDownload}`, () => {
-            const next = this.nextDownload();
-            this.maxDownload = next;
-            AppConfig.setNumber(KEYS.MAX_DOWNLOAD, next);
-          })
-
-          this.sectionTitle(I18n.t('basicSettings.plugin'))
-          this.switchRow(I18n.t('basicSettings.autoUpdatePlugin'), '', this.autoUpdatePlugin, (on: boolean) => {
-            this.autoUpdatePlugin = on;
-            AppConfig.setBool(KEYS.AUTO_UPDATE_PLUGIN, on);
-          })
-
-          this.sectionTitle(I18n.t('basicSettings.lyric'))
-          this.switchRow(I18n.t('basicSettings.lyric.autoSearchLyric'), I18n.t('basicSettings.lyric.autoSearchLyricHint'), this.autoSearchLyric, (on: boolean) => {
-            this.autoSearchLyric = on;
-            AppConfig.setBool(KEYS.AUTO_SEARCH_LYRIC, on);
-          })
-          this.switchRow(
-            I18n.t('basicSettings.lyric.showStatusBarLyric'),
-            I18n.t('basicSettings.lyric.showStatusBarLyricHint'),
-            this.desktopLyric,
-            (on: boolean) => {
-              this.desktopLyric = on;
-              FloatingLyric.setEnabled(on);
-              AppConfig.setBool(KEYS.SHOW_STATUS_BAR_LYRIC, on);
-            }
-          )
-
-          this.sectionTitle(I18n.t('basicSettings.cache'))
-          this.valueRow(I18n.t('basicSettings.cache.clearMediaCache'), I18n.t('basicSettings.cache.clearMediaCacheHint'), () => {
-            MediaCache.clear();
-            promptAction.showToast({ message: I18n.t('toast.mediaCacheCleared'), duration: 1500 });
-          })
-
-          this.sectionTitle(I18n.t('basicSettings.common'))
-          this.valueRow(I18n.t('basicSettings.maxHistoryLength'), `${this.maxHistoryLen}`, () => {
-            const next = this.nextHistory();
-            this.maxHistoryLen = next;
-            AppConfig.setNumber(KEYS.MAX_HISTORY, next);
-            AppService.history.maxLength = next;
-          })
-        }
-        .width('100%')
-        .padding({ bottom: 32 })
-      }
-      .layoutWeight(1)
-      .scrollBar(BarState.Off)
-      .align(Alignment.TopStart)
-    }
-    .id(`basic-${this.appLocale}`)
-    .width('100%')
-    .height('100%')
-    .backgroundColor(this.pageBackground)
-  }
-
-  @Builder
-  sectionTitle(title: string) {
-    Text(title)
-      .fontSize(13)
-      .fontColor(this.textSecondary)
-      .width('100%')
-      .padding({ left: 16, top: 12, bottom: 4 })
-  }
-
-  @Builder
-  switchRow(title: string, desc: string, isOn: boolean, onChange: (on: boolean) => void) {
-    Row() {
-      Column() {
-        Text(title).fontSize(15).fontColor(this.textColor)
-        if (desc.length > 0) {
-          Text(desc).fontSize(12).fontColor(this.textSecondary).margin({ top: 4 })
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: isOn })
-        .selectedColor(this.primary)
-        .onChange(onChange)
-    }
-    .width('100%')
-    .padding(16)
-  }
-
-  @Builder
-  valueRow(title: string, value: string, action: () => void) {
-    Row() {
-      Text(title).fontSize(15).fontColor(this.textColor)
-      Blank()
-      Text(value).fontSize(13).fontColor(this.textSecondary)
-    }
-    .width('100%')
-    .padding(16)
-    .onClick(action)
-  }
-}
-
-@Component
 export struct ThemePage {
   @StorageLink('pageBackground') pageBackground: string = '#202020';
   @StorageLink('textColor') textColor: string = '#FCFCFC';
@@ -311,51 +56,109 @@ export struct ThemePage {
   @StorageLink('themeFollowSystem') themeFollowSystem: boolean = false;
   @StorageLink('themeSelected') themeSelected: string = 'p-dark';
   @StorageLink('themeDark') themeDark: boolean = true;
+  @StorageLink('themeRev') themeRev: number = 0;
   @StorageLink('appLocale') appLocale: string = 'zh-CN';
+  @State viewRev: number = 0;
+  @State selectedKey: string = 'dark';
+
+  aboutToAppear(): void {
+    if (this.themeSelected === 'custom') {
+      this.selectedKey = 'custom';
+    } else if (this.themeDark) {
+      this.selectedKey = 'dark';
+    } else {
+      this.selectedKey = 'light';
+    }
+  }
+
+  private readStore(key: string, fallback: string): string {
+    const raw = AppStorage.get<string>(key);
+    if (raw === undefined || raw === null) {
+      return fallback;
+    }
+    const text = `${raw}`.trim();
+    if (text.length === 0) {
+      return fallback;
+    }
+    return text;
+  }
+
+  private afterThemeChange(): void {
+    this.pageBackground = this.readStore(STORE_KEYS.pageBackground, this.pageBackground);
+    this.textColor = this.readStore(STORE_KEYS.textColor, this.textColor);
+    this.textSecondary = this.readStore(STORE_KEYS.textSecondary, this.textSecondary);
+    this.primary = this.readStore(STORE_KEYS.primary, this.primary);
+    this.placeholder = this.readStore(STORE_KEYS.placeholder, this.placeholder);
+    this.viewRev = this.viewRev + 1;
+  }
+
+  private chooseTheme(key: string): void {
+    this.selectedKey = key;
+    this.themeFollowSystem = false;
+    if (key === 'light') {
+      AppService.theme.setDark(false);
+    } else if (key === 'dark') {
+      AppService.theme.setDark(true);
+    } else {
+      AppService.theme.selectCustom();
+    }
+    this.afterThemeChange();
+    if (key === 'custom') {
+      AppService.push(ROUTES.SET_CUSTOM_THEME);
+    }
+  }
 
   build() {
     Column() {
-      AppNavBar({ title: I18n.t('sidebar.themeSettings'), onBack: () => { AppService.pop(); } })
+      AppNavBar({ title: I18n.tx(this.appLocale, 'sidebar.themeSettings'), stamp: this.viewRev, onBack: () => { AppService.pop(); } })
       Scroll() {
         Column() {
-          Text(I18n.t('themeSettings.displayStyle'))
+          Text(I18n.tx(this.appLocale, 'themeSettings.displayStyle'))
             .fontSize(14)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.textColor)
             .width('100%')
             .padding({ left: 16, top: 18 })
           Row() {
-            Text(I18n.t('themeSettings.followSystemTheme')).fontSize(15).fontColor(this.textColor)
+            Text(I18n.tx(this.appLocale, 'themeSettings.followSystemTheme')).fontSize(15).fontColor(this.textColor)
             Blank()
-            Toggle({ type: ToggleType.Switch, isOn: this.themeFollowSystem })
-              .selectedColor(this.primary)
-              .onChange((on: boolean) => {
-                AppService.theme.setFollowSystem(on);
-              })
+            Stack() {
+              Row()
+                .width(20)
+                .height(20)
+                .borderRadius(10)
+                .backgroundColor('#FFFFFF')
+            }
+            .width(46)
+            .height(24)
+            .borderRadius(12)
+            .clip(true)
+            .padding({ left: 2, right: 2 })
+            .alignContent(this.themeFollowSystem ? Alignment.End : Alignment.Start)
+            .backgroundColor(this.themeFollowSystem ? this.primary : this.placeholder)
+            .onClick(() => {
+              const next = !this.themeFollowSystem;
+              this.themeFollowSystem = next;
+              AppService.theme.setFollowSystem(next);
+              if (next) {
+                this.selectedKey = AppService.theme.isDark ? 'dark' : 'light';
+              }
+              this.afterThemeChange();
+            })
           }
           .width('100%')
           .padding(16)
 
-          Text(I18n.t('themeSettings.setTheme'))
+          Text(I18n.tx(this.appLocale, 'themeSettings.setTheme'))
             .fontSize(14)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.textColor)
             .width('100%')
             .padding({ left: 16, top: 8 })
           Row() {
-            this.themeCard('#FFFFFF', I18n.t('themeSettings.lightMode'), !this.themeDark && this.themeSelected !== 'custom', false, () => {
-              AppService.theme.setFollowSystem(false);
-              AppService.theme.setDark(false);
-            })
-            this.themeCard('#131313', I18n.t('themeSettings.darkMode'), this.themeDark && this.themeSelected !== 'custom', false, () => {
-              AppService.theme.setFollowSystem(false);
-              AppService.theme.setDark(true);
-            })
-            this.themeCard(this.placeholder, I18n.t('themeSettings.customMode'), this.themeSelected === 'custom', true, () => {
-              AppService.theme.setFollowSystem(false);
-              AppService.theme.selectCustom();
-              AppService.push(ROUTES.SET_CUSTOM_THEME);
-            })
+            this.themeCard('#FFFFFF', I18n.tx(this.appLocale, 'themeSettings.lightMode'), 'light', false)
+            this.themeCard('#131313', I18n.tx(this.appLocale, 'themeSettings.darkMode'), 'dark', false)
+            this.themeCard(this.placeholder, I18n.tx(this.appLocale, 'themeSettings.customMode'), 'custom', true)
           }
           .width('100%')
           .padding({ left: 16, right: 16, top: 14, bottom: 24 })
@@ -375,7 +178,7 @@ export struct ThemePage {
   }
 
   @Builder
-  themeCard(previewColor: string, title: string, selected: boolean, isCustom: boolean, onPress: () => void) {
+  themeCard(previewColor: string, title: string, key: string, isCustom: boolean) {
     Column() {
       Column() {
         if (isCustom) {
@@ -400,7 +203,7 @@ export struct ThemePage {
 
       Text(title)
         .fontSize(12)
-        .fontColor(selected ? this.primary : this.textColor)
+        .fontColor(this.selectedKey === key ? this.primary : this.textColor)
         .margin({ top: 6 })
         .maxLines(1)
         .textAlign(TextAlign.Center)
@@ -411,10 +214,12 @@ export struct ThemePage {
     .margin({ right: 12 })
     .border({
       width: 2,
-      color: selected ? this.primary : '#00000000',
+      color: this.selectedKey === key ? this.primary : '#00000000',
       radius: 12
     })
-    .onClick(onPress)
+    .onClick(() => {
+      this.chooseTheme(key);
+    })
   }
 }
 
@@ -423,12 +228,11 @@ export struct AboutPage {
   @StorageLink('pageBackground') pageBackground: string = '#202020';
   @StorageLink('textColor') textColor: string = '#FCFCFC';
   @StorageLink('textSecondary') textSecondary: string = '#B3FCFCFC';
-  @StorageLink('primary') primary: string = '#3FA3B5';
   @StorageLink('appLocale') appLocale: string = 'zh-CN';
 
   build() {
     Column() {
-      AppNavBar({ title: I18n.t('about.title'), onBack: () => { AppService.pop(); } })
+      AppNavBar({ title: I18n.tx(this.appLocale, 'about.title'), onBack: () => { AppService.pop(); } })
       Scroll() {
         Column() {
           Image($r('app.media.app_icon'))
@@ -440,10 +244,10 @@ export struct AboutPage {
               UpdateService.showResult(true);
             })
           Text('MusicFree').fontSize(22).fontWeight(FontWeight.Bold).fontColor(this.textColor).margin({ top: 12 })
-          Text(`${I18n.t('about.harmonyVersion')}  ${APP_VERSION}`).fontSize(13).fontColor(this.textSecondary).margin({ top: 4 })
+          Text(`${I18n.tx(this.appLocale, 'about.harmonyVersion')}  ${APP_VERSION}`).fontSize(13).fontColor(this.textSecondary).margin({ top: 4 })
           Row() {
             IconImg({ name: 'arrow-path', iconSize: 18, color: this.textColor })
-            Text(I18n.t('sidebar.checkUpdate')).fontSize(15).fontColor(this.textColor).margin({ left: 8 })
+            Text(I18n.tx(this.appLocale, 'sidebar.checkUpdate')).fontSize(15).fontColor(this.textColor).margin({ left: 8 })
           }
           .margin({ top: 16 })
           .padding({ left: 16, right: 16, top: 10, bottom: 10 })
@@ -451,24 +255,13 @@ export struct AboutPage {
           .onClick(() => {
             UpdateService.showResult(true);
           })
-          Text(I18n.t('about.author')).fontSize(14).fontColor(this.textColor).margin({ top: 24 })
-          Text(I18n.t('about.officialAccount')).fontSize(14).fontColor(this.textColor).margin({ top: 8 })
-          Text(I18n.t('about.intro'))
+          Text(I18n.tx(this.appLocale, 'about.author')).fontSize(14).fontColor(this.textColor).margin({ top: 24 })
+          Text(I18n.tx(this.appLocale, 'about.license'))
             .fontSize(13)
             .fontColor(this.textSecondary)
-            .margin({ top: 20, left: 24, right: 24 })
-          Text(I18n.t('about.license'))
-            .fontSize(13)
-            .fontColor(this.textSecondary)
-            .margin({ top: 12, left: 24, right: 24 })
-          Text(I18n.t('about.website'))
-            .fontSize(13)
-            .fontColor(this.primary)
-            .margin({ top: 16 })
-          Text(I18n.t('about.agplHint'))
-            .fontSize(12)
-            .fontColor(this.textSecondary)
-            .margin({ top: 16, bottom: 32 })
+            .margin({ top: 20, left: 24, right: 24, bottom: 32 })
+            .width('100%')
+            .textAlign(TextAlign.Start)
         }
         .width('100%')
         .alignItems(HorizontalAlign.Center)
@@ -492,7 +285,9 @@ export struct BackupPage {
   @StorageLink('primary') primary: string = '#3FA3B5';
   @StorageLink('placeholder') placeholder: string = '#424242';
   @StorageLink('backdrop') backdrop: string = '#303030';
+  @StorageLink('mask') maskColor: string = '#CC212121';
   @StorageLink('appLocale') appLocale: string = 'zh-CN';
+  @StorageLink('gestureBarHeight') gestureBarHeight: number = 16;
   @State resumeMode: string = ResumeMode.APPEND;
   @State davUrl: string = '';
   @State davUser: string = '';
@@ -500,6 +295,8 @@ export struct BackupPage {
   @State busy: boolean = false;
   @State resumeUrl: string = '';
   @State showResumeMode: boolean = false;
+  @State showUrlResume: boolean = false;
+  @State showDav: boolean = false;
 
   aboutToAppear(): void {
     this.resumeMode = AppService.resumeMode;
@@ -509,7 +306,13 @@ export struct BackupPage {
   }
 
   private modeLabel(): string {
-    return this.resumeMode === ResumeMode.OVERWRITE ? I18n.t('backupAndResume.resumeMode.overwrite') : I18n.t('backupAndResume.resumeMode.append');
+    if (this.resumeMode === ResumeMode.OVERWRITE) {
+      return I18n.tx(this.appLocale, 'backupAndResume.resumeMode.overwrite');
+    }
+    if (this.resumeMode === ResumeMode.OVERWRITE_DEFAULT) {
+      return I18n.tx(this.appLocale, 'backupAndResume.resumeMode.overwrite-default');
+    }
+    return I18n.tx(this.appLocale, 'backupAndResume.resumeMode.append');
   }
 
   private pickResumeMode(mode: string): void {
@@ -518,14 +321,30 @@ export struct BackupPage {
     this.showResumeMode = false;
   }
 
-  private backupLocal(): void {
-    try {
-      const path = `${AppStorageUtil.filesRoot()}/musicfree-backup.json`;
-      AppStorageUtil.writeText(path, AppService.buildBackupJson());
-      promptAction.showToast({ message: I18n.t('backup.savedToSandbox'), duration: 2500 });
-    } catch (_e) {
-      promptAction.showToast({ message: I18n.t('toast.backupFail'), duration: 2000 });
+  async backupLocal(): Promise<void> {
+    if (this.busy) {
+      return;
     }
+    this.busy = true;
+    try {
+      const raw = AppService.buildBackupJson();
+      const sandbox = `${AppStorageUtil.filesRoot()}/backup.json`;
+      AppStorageUtil.writeText(sandbox, raw);
+      const documentSaveOptions = new picker.DocumentSaveOptions();
+      documentSaveOptions.newFileNames = ['backup.json'];
+      const documentViewPicker = new picker.DocumentViewPicker();
+      const uris = await documentViewPicker.save(documentSaveOptions);
+      if (uris.length > 0) {
+        AppStorageUtil.writeTextToUri(uris[0], raw);
+        promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.backupSuccess'), duration: 2000 });
+      } else {
+        promptAction.showToast({ message: I18n.tx(this.appLocale, 'backup.savedToSandbox'), duration: 2500 });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : I18n.tx(this.appLocale, 'toast.backupFail');
+      promptAction.showToast({ message: msg, duration: 2500 });
+    }
+    this.busy = false;
   }
 
   async resumeLocal(): Promise<void> {
@@ -533,24 +352,24 @@ export struct BackupPage {
       return;
     }
     try {
+      const documentSelectOptions = new picker.DocumentSelectOptions();
+      documentSelectOptions.maxSelectNumber = 1;
       const docPicker = new picker.DocumentViewPicker();
-      const uris = await docPicker.select({
-        maxSelectNumber: 1,
-        fileSuffixFilters: ['.json', '.txt']
-      });
+      const uris = await docPicker.select(documentSelectOptions);
       if (uris.length === 0) {
         return;
       }
-      const raw = AppStorageUtil.readText(uris[0]);
-      if (raw.length === 0) {
-        promptAction.showToast({ message: I18n.t('toast.backupFileNotFound'), duration: 2000 });
+      const raw = AppStorageUtil.readTextFromUri(uris[0]);
+      if (raw.trim().length === 0) {
+        promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.backupFileNotFound'), duration: 2000 });
         return;
       }
       this.busy = true;
-      AppService.restoreBackup(raw);
-      promptAction.showToast({ message: I18n.t('toast.resumeSuccess'), duration: 2000 });
+      promptAction.showToast({ message: I18n.tx(this.appLocale, 'backupAndResume.resuming'), duration: 1500 });
+      const msg = await AppService.restoreBackup(raw);
+      promptAction.showToast({ message: msg, duration: 3000 });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : I18n.t('toast.resumeFail');
+      const msg = e instanceof Error ? e.message : I18n.tx(this.appLocale, 'toast.resumeFail');
       promptAction.showToast({ message: msg, duration: 2500 });
     }
     this.busy = false;
@@ -562,21 +381,22 @@ export struct BackupPage {
     }
     const url = this.resumeUrl.trim();
     if (!url.endsWith('.json') && !url.endsWith('.txt')) {
-      promptAction.showToast({ message: I18n.t('toast.resumeUrlInvalid'), duration: 2000 });
+      promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.resumeUrlInvalid'), duration: 2000 });
       return;
     }
     this.busy = true;
     try {
-      const raw = await HttpUtil.getText(url);
-      if (raw.length === 0) {
-        promptAction.showToast({ message: I18n.t('toast.backupFileNotFound'), duration: 2000 });
+      const raw = await HttpUtil.getText(url, undefined, 60000);
+      if (raw.trim().length === 0) {
+        promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.backupFileNotFound'), duration: 2000 });
         this.busy = false;
         return;
       }
-      AppService.restoreBackup(raw);
-      promptAction.showToast({ message: I18n.t('toast.resumeSuccess'), duration: 2000 });
+      const msg = await AppService.restoreBackup(raw);
+      this.showUrlResume = false;
+      promptAction.showToast({ message: msg, duration: 3000 });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : I18n.t('toast.resumeFail');
+      const msg = e instanceof Error ? e.message : I18n.tx(this.appLocale, 'toast.resumeFail');
       promptAction.showToast({ message: msg, duration: 2500 });
     }
     this.busy = false;
@@ -584,7 +404,8 @@ export struct BackupPage {
 
   async saveDav(): Promise<void> {
     await AppService.saveWebdav(this.davUrl.trim(), this.davUser.trim(), this.davPass);
-    promptAction.showToast({ message: I18n.t('toast.saveSuccess'), duration: 1500 });
+    this.showDav = false;
+    promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.saveSuccess'), duration: 1500 });
   }
 
   private davClient(): WebDavService {
@@ -600,16 +421,16 @@ export struct BackupPage {
       return;
     }
     if (!this.davReady()) {
-      promptAction.showToast({ message: I18n.t('backup.webdavNeedConfig'), duration: 2000 });
+      promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.resumePreCheckFailed'), duration: 2000 });
       return;
     }
     this.busy = true;
     try {
       await AppService.saveWebdav(this.davUrl.trim(), this.davUser.trim(), this.davPass);
       await this.davClient().putBackup(AppService.buildBackupJson());
-      promptAction.showToast({ message: I18n.t('backup.savedToWebdav'), duration: 2000 });
+      promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.backupSuccess'), duration: 2000 });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : I18n.t('backup.webdavBackupFail');
+      const msg = e instanceof Error ? e.message : I18n.tx(this.appLocale, 'backup.webdavBackupFail');
       promptAction.showToast({ message: msg, duration: 2500 });
     }
     this.busy = false;
@@ -620,184 +441,133 @@ export struct BackupPage {
       return;
     }
     if (!this.davReady()) {
-      promptAction.showToast({ message: I18n.t('backup.webdavNeedConfig'), duration: 2000 });
+      promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.resumePreCheckFailed'), duration: 2000 });
       return;
     }
     this.busy = true;
     try {
       await AppService.saveWebdav(this.davUrl.trim(), this.davUser.trim(), this.davPass);
       const raw = await this.davClient().getBackup();
-      AppService.restoreBackup(raw);
-      promptAction.showToast({ message: I18n.t('toast.resumeSuccess'), duration: 2000 });
+      const msg = await AppService.restoreBackup(raw);
+      promptAction.showToast({ message: msg, duration: 3000 });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : I18n.t('backup.webdavResumeFail');
+      const msg = e instanceof Error ? e.message : I18n.tx(this.appLocale, 'backup.webdavResumeFail');
       promptAction.showToast({ message: msg, duration: 2500 });
     }
     this.busy = false;
   }
 
   build() {
-    Column() {
-      AppNavBar({ title: I18n.t('sidebar.backupAndResume'), onBack: () => { AppService.pop(); } })
-      Scroll() {
-        Column() {
-          Text(I18n.t('backupAndResume.resumeMode'))
-            .fontSize(13)
-            .fontColor(this.textSecondary)
-            .width('100%')
-            .padding({ left: 16, top: 12, bottom: 4 })
-          Row() {
-            Column() {
-              Text(I18n.t('backupAndResume.resumeMode')).fontSize(15).fontColor(this.textColor)
-              Text(this.modeLabel()).fontSize(12).fontColor(this.textSecondary).margin({ top: 4 })
-            }
-            .alignItems(HorizontalAlign.Start)
-            .layoutWeight(1)
-          }
-          .width('100%')
-          .padding(16)
-          .onClick(() => {
-            this.showResumeMode = true;
-          })
-
-          Text(I18n.t('backupAndResume.localBackup'))
-            .fontSize(13)
-            .fontColor(this.textSecondary)
-            .width('100%')
-            .padding({ left: 16, top: 8, bottom: 4 })
-          this.actionRow(I18n.t('backupAndResume.backupToLocal'), () => {
-            this.backupLocal();
-          })
-          this.actionRow(I18n.t('backupAndResume.resumeFromLocalFile'), () => {
-            this.resumeLocal();
-          })
-          TextInput({ placeholder: I18n.t('backupAndResume.resumeFromUrlDialogPlaceHolder'), text: this.resumeUrl })
-            .width('92%')
-            .margin({ top: 8 })
-            .backgroundColor(this.placeholder)
-            .fontColor(this.textColor)
-            .placeholderColor(this.textSecondary)
-            .onChange((v: string) => {
-              this.resumeUrl = v;
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
+        AppNavBar({ title: I18n.tx(this.appLocale, 'sidebar.backupAndResume'), onBack: () => { AppService.pop(); } })
+        Scroll() {
+          Column() {
+            this.sectionTitle(I18n.tx(this.appLocale, 'sidebar.backupAndResume'))
+            this.actionRow(I18n.tx(this.appLocale, 'backupAndResume.resumeMode'), this.modeLabel(), () => {
+              this.showResumeMode = true;
             })
-          Button(I18n.t('backupAndResume.resumeFromUrlDialogTitle'))
-            .width('90%')
-            .margin({ top: 12, bottom: 8 })
-            .backgroundColor(this.primary)
-            .fontColor('#FEFEFE')
-            .enabled(!this.busy)
-            .onClick(() => {
-              this.resumeFromUrl();
+            this.sectionTitle(I18n.tx(this.appLocale, 'backupAndResume.localBackup'))
+            this.actionRow(I18n.tx(this.appLocale, 'backupAndResume.backupToLocal'), '', () => {
+              this.backupLocal();
             })
-
-          Text(I18n.t('backupAndResume.webdavSettings'))
-            .fontSize(13)
-            .fontColor(this.textSecondary)
-            .width('100%')
-            .padding({ left: 16, top: 12, bottom: 4 })
-          TextInput({ placeholder: I18n.t('backupAndResume.webdavUrl'), text: this.davUrl })
-            .width('92%')
-            .margin({ top: 8 })
-            .backgroundColor(this.placeholder)
-            .fontColor(this.textColor)
-            .placeholderColor(this.textSecondary)
-            .onChange((v: string) => {
-              this.davUrl = v;
+            this.actionRow(I18n.tx(this.appLocale, 'backupAndResume.resumeFromLocalFile'), '', () => {
+              this.resumeLocal();
             })
-          TextInput({ placeholder: I18n.t('common.username'), text: this.davUser })
-            .width('92%')
-            .margin({ top: 8 })
-            .backgroundColor(this.placeholder)
-            .fontColor(this.textColor)
-            .placeholderColor(this.textSecondary)
-            .onChange((v: string) => {
-              this.davUser = v;
+            this.actionRow(I18n.tx(this.appLocale, 'backupAndResume.resumeFromUrlDialogTitle'), '', () => {
+              this.resumeUrl = '';
+              this.showUrlResume = true;
             })
-          TextInput({ placeholder: I18n.t('common.password'), text: this.davPass })
-            .width('92%')
-            .margin({ top: 8 })
-            .backgroundColor(this.placeholder)
-            .fontColor(this.textColor)
-            .placeholderColor(this.textSecondary)
-            .type(InputType.Password)
-            .onChange((v: string) => {
-              this.davPass = v;
+            this.sectionTitle(I18n.tx(this.appLocale, 'backupAndResume.webdavSettings'))
+            this.actionRow(I18n.tx(this.appLocale, 'backupAndResume.webdavSettings'), '', () => {
+              this.showDav = true;
             })
-          Button(I18n.t('backupAndResume.saveWebdav'))
-            .width('90%')
-            .margin({ top: 16 })
-            .backgroundColor(this.primary)
-            .fontColor('#FEFEFE')
-            .enabled(!this.busy)
-            .onClick(() => {
-              this.saveDav();
-            })
-          Button(I18n.t('backupAndResume.backupToWebdav'))
-            .width('90%')
-            .margin({ top: 12 })
-            .backgroundColor(this.primary)
-            .fontColor('#FEFEFE')
-            .enabled(!this.busy)
-            .onClick(() => {
+            this.actionRow(I18n.tx(this.appLocale, 'backupAndResume.backupToWebdav'), '', () => {
               this.backupWebdav();
             })
-          Button(I18n.t('backupAndResume.resumeFromWebdav'))
-            .width('90%')
-            .margin({ top: 12, bottom: 32 })
-            .backgroundColor(this.primary)
-            .fontColor('#FEFEFE')
-            .enabled(!this.busy)
-            .onClick(() => {
+            this.actionRow(I18n.tx(this.appLocale, 'backupAndResume.resumeFromWebdav'), '', () => {
               this.resumeWebdav();
             })
+          }
+          .width('100%')
+          .padding({ bottom: 32 })
+          .alignItems(HorizontalAlign.Start)
         }
-        .width('100%')
-        .alignItems(HorizontalAlign.Center)
+        .layoutWeight(1)
+        .scrollBar(BarState.Off)
+        .align(Alignment.TopStart)
       }
-      .layoutWeight(1)
-      .scrollBar(BarState.Off)
-      .align(Alignment.TopStart)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(this.pageBackground)
+
+      if (this.showResumeMode) {
+        this.resumeModeOverlay()
+      }
+      if (this.showUrlResume) {
+        this.urlResumeOverlay()
+      }
+      if (this.showDav) {
+        this.davOverlay()
+      }
     }
     .id(`backup-${this.appLocale}`)
     .width('100%')
     .height('100%')
-    .backgroundColor(this.pageBackground)
-    .bindSheet($$this.showResumeMode, this.resumeModeBuilder(), {
-      height: 240,
-      showClose: false,
-      backgroundColor: this.backdrop,
-      blurStyle: BlurStyle.NONE
-    })
   }
 
   @Builder
-  resumeModeBuilder() {
-    Column() {
-      Row() {
-        Text(I18n.t('backupAndResume.setResumeMode'))
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.textColor)
-          .layoutWeight(1)
-        Row() {
-          IconImg({ name: 'x-mark', iconSize: 18, color: this.textSecondary })
-        }
-        .width(36)
-        .height(36)
-        .justifyContent(FlexAlign.Center)
+  sectionTitle(title: string) {
+    Text(title)
+      .fontSize(13)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(this.textSecondary)
+      .width('100%')
+      .padding({ left: 16, top: 16, bottom: 4 })
+  }
+
+  @Builder
+  resumeModeOverlay() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.maskColor)
         .onClick(() => {
           this.showResumeMode = false;
         })
+      Column() {
+        Row() {
+          Text(I18n.tx(this.appLocale, 'backupAndResume.setResumeMode'))
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+          Row() {
+            IconImg({ name: 'x-mark', iconSize: 18, color: this.textSecondary })
+          }
+          .width(36)
+          .height(36)
+          .justifyContent(FlexAlign.Center)
+          .onClick(() => {
+            this.showResumeMode = false;
+          })
+        }
+        .width('100%')
+        .height(48)
+        .padding({ left: 16, right: 8 })
+        this.resumeModeRow(I18n.tx(this.appLocale, 'backupAndResume.resumeMode.append'), ResumeMode.APPEND)
+        this.resumeModeRow(I18n.tx(this.appLocale, 'backupAndResume.resumeMode.overwrite-default'), ResumeMode.OVERWRITE_DEFAULT)
+        this.resumeModeRow(I18n.tx(this.appLocale, 'backupAndResume.resumeMode.overwrite'), ResumeMode.OVERWRITE)
       }
       .width('100%')
-      .height(48)
-      .padding({ left: 16, right: 8 })
-      this.resumeModeRow(I18n.t('backupAndResume.resumeMode.append'), ResumeMode.APPEND)
-      this.resumeModeRow(I18n.t('backupAndResume.resumeMode.overwrite'), ResumeMode.OVERWRITE)
+      .padding({ bottom: 12 + this.gestureBarHeight })
+      .backgroundColor(this.backdrop)
+      .borderRadius({ topLeft: 12, topRight: 12 })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.backdrop)
+    .zIndex(20)
   }
 
   @Builder
@@ -820,13 +590,155 @@ export struct BackupPage {
   }
 
   @Builder
-  actionRow(title: string, action: () => void) {
-    Row() {
-      Text(title).fontSize(15).fontColor(this.textColor)
+  urlResumeOverlay() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.maskColor)
+        .onClick(() => {
+          this.showUrlResume = false;
+        })
+      Column() {
+        Text(I18n.tx(this.appLocale, 'backupAndResume.resumeFromUrlDialogTitle'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+          .margin({ top: 16, bottom: 8 })
+        TextInput({ placeholder: I18n.tx(this.appLocale, 'backupAndResume.resumeFromUrlDialogPlaceHolder'), text: this.resumeUrl })
+          .width('92%')
+          .backgroundColor(this.placeholder)
+          .fontColor(this.textColor)
+          .placeholderColor(this.textSecondary)
+          .onChange((v: string) => {
+            this.resumeUrl = v;
+          })
+        Row() {
+          Text(I18n.tx(this.appLocale, 'common.cancel'))
+            .fontSize(15)
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 16 })
+            .onClick(() => {
+              this.showUrlResume = false;
+            })
+          Text(I18n.tx(this.appLocale, 'common.confirm'))
+            .fontSize(15)
+            .fontColor(this.primary)
+            .layoutWeight(1)
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 16 })
+            .onClick(() => {
+              this.resumeFromUrl();
+            })
+        }
+        .width('100%')
+        .margin({ top: 8 })
+      }
+      .width('100%')
+      .padding({ bottom: this.gestureBarHeight })
+      .backgroundColor(this.backdrop)
+      .borderRadius({ topLeft: 12, topRight: 12 })
     }
     .width('100%')
-    .height(52)
-    .padding({ left: 16, right: 16 })
+    .height('100%')
+    .zIndex(20)
+  }
+
+  @Builder
+  davOverlay() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.maskColor)
+        .onClick(() => {
+          this.showDav = false;
+        })
+      Column() {
+        Text(I18n.tx(this.appLocale, 'backupAndResume.webdavSettings'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+          .margin({ top: 16, bottom: 8 })
+        TextInput({ placeholder: I18n.tx(this.appLocale, 'backupAndResume.webdavUrl'), text: this.davUrl })
+          .width('92%')
+          .margin({ top: 8 })
+          .backgroundColor(this.placeholder)
+          .fontColor(this.textColor)
+          .placeholderColor(this.textSecondary)
+          .onChange((v: string) => {
+            this.davUrl = v;
+          })
+        TextInput({ placeholder: I18n.tx(this.appLocale, 'common.username'), text: this.davUser })
+          .width('92%')
+          .margin({ top: 8 })
+          .backgroundColor(this.placeholder)
+          .fontColor(this.textColor)
+          .placeholderColor(this.textSecondary)
+          .onChange((v: string) => {
+            this.davUser = v;
+          })
+        TextInput({ placeholder: I18n.tx(this.appLocale, 'common.password'), text: this.davPass })
+          .width('92%')
+          .margin({ top: 8 })
+          .backgroundColor(this.placeholder)
+          .fontColor(this.textColor)
+          .placeholderColor(this.textSecondary)
+          .type(InputType.Password)
+          .onChange((v: string) => {
+            this.davPass = v;
+          })
+        Row() {
+          Text(I18n.tx(this.appLocale, 'common.cancel'))
+            .fontSize(15)
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 16 })
+            .onClick(() => {
+              this.showDav = false;
+            })
+          Text(I18n.tx(this.appLocale, 'common.save'))
+            .fontSize(15)
+            .fontColor(this.primary)
+            .layoutWeight(1)
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 16 })
+            .onClick(() => {
+              this.saveDav();
+            })
+        }
+        .width('100%')
+        .margin({ top: 8 })
+      }
+      .width('100%')
+      .padding({ bottom: this.gestureBarHeight })
+      .backgroundColor(this.backdrop)
+      .borderRadius({ topLeft: 12, topRight: 12 })
+    }
+    .width('100%')
+    .height('100%')
+    .zIndex(20)
+  }
+
+  @Builder
+  actionRow(title: string, value: string, action: () => void) {
+    Row() {
+      Text(title).fontSize(15).fontColor(this.textColor).layoutWeight(1)
+      if (value.length > 0) {
+        Text(value)
+          .fontSize(12)
+          .fontColor(this.textSecondary)
+          .maxLines(2)
+          .textAlign(TextAlign.End)
+          .constraintSize({ maxWidth: '48%' })
+      }
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 52 })
+    .padding({ left: 16, right: 16, top: 12, bottom: 12 })
     .onClick(action)
   }
 }
