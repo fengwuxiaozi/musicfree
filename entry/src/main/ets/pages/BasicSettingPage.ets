@@ -9,6 +9,7 @@ import { MediaCache } from '../core/MediaCache';
 import { QUALITIES } from '../common/Constants';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { promptAction } from '@kit.ArkUI';
+import { AppChannel } from '../core/AppChannel';
 
 @Component
 export struct BasicSettingPage {
@@ -269,17 +270,22 @@ export struct BasicSettingPage {
   }
 
   private tabTitles(): string[] {
-    return [
+    const titles: string[] = [
       I18n.tx(this.appLocale, 'basicSettings.common'),
-      I18n.tx(this.appLocale, 'basicSettings.sheetAndAlbum'),
-      I18n.tx(this.appLocale, 'basicSettings.plugin'),
-      I18n.tx(this.appLocale, 'basicSettings.playback'),
-      I18n.tx(this.appLocale, 'basicSettings.download'),
-      I18n.tx(this.appLocale, 'basicSettings.network'),
-      I18n.tx(this.appLocale, 'basicSettings.lyric'),
-      I18n.tx(this.appLocale, 'basicSettings.cache'),
-      I18n.tx(this.appLocale, 'basicSettings.developer')
+      I18n.tx(this.appLocale, 'basicSettings.sheetAndAlbum')
     ];
+    if (!AppChannel.isStore()) {
+      titles.push(I18n.tx(this.appLocale, 'basicSettings.plugin'));
+    }
+    titles.push(I18n.tx(this.appLocale, 'basicSettings.playback'));
+    if (!AppChannel.isStore()) {
+      titles.push(I18n.tx(this.appLocale, 'basicSettings.download'));
+    }
+    titles.push(I18n.tx(this.appLocale, 'basicSettings.network'));
+    titles.push(I18n.tx(this.appLocale, 'basicSettings.lyric'));
+    titles.push(I18n.tx(this.appLocale, 'basicSettings.cache'));
+    titles.push(I18n.tx(this.appLocale, 'basicSettings.developer'));
+    return titles;
   }
 
   private musicOrderLabel(): string {
@@ -405,19 +411,21 @@ export struct BasicSettingPage {
               ], this.musicOrder);
           })
 
-          this.sectionTitle(I18n.tx(this.appLocale, 'basicSettings.plugin'))
-          this.switchRow(I18n.tx(this.appLocale, 'basicSettings.autoUpdatePlugin'), '', this.autoUpdatePlugin, (on: boolean) => {
-            this.autoUpdatePlugin = on;
-            AppConfig.setBool(KEYS.AUTO_UPDATE_PLUGIN, on);
-          })
-          this.switchRow(I18n.tx(this.appLocale, 'basicSettings.notCheckPluginVersion'), '', this.notCheckPluginVersion, (on: boolean) => {
-            this.notCheckPluginVersion = on;
-            AppConfig.setBool(KEYS.NOT_CHECK_PLUGIN_VERSION, on);
-          })
-          this.switchRow(I18n.tx(this.appLocale, 'basicSettings.lazyLoadPlugin'), '', this.lazyLoadPlugin, (on: boolean) => {
-            this.lazyLoadPlugin = on;
-            AppConfig.setBool(KEYS.LAZY_LOAD_PLUGIN, on);
-          })
+          if (!AppChannel.isStore()) {
+            this.sectionTitle(I18n.tx(this.appLocale, 'basicSettings.plugin'))
+            this.switchRow(I18n.tx(this.appLocale, 'basicSettings.autoUpdatePlugin'), '', this.autoUpdatePlugin, (on: boolean) => {
+              this.autoUpdatePlugin = on;
+              AppConfig.setBool(KEYS.AUTO_UPDATE_PLUGIN, on);
+            })
+            this.switchRow(I18n.tx(this.appLocale, 'basicSettings.notCheckPluginVersion'), '', this.notCheckPluginVersion, (on: boolean) => {
+              this.notCheckPluginVersion = on;
+              AppConfig.setBool(KEYS.NOT_CHECK_PLUGIN_VERSION, on);
+            })
+            this.switchRow(I18n.tx(this.appLocale, 'basicSettings.lazyLoadPlugin'), '', this.lazyLoadPlugin, (on: boolean) => {
+              this.lazyLoadPlugin = on;
+              AppConfig.setBool(KEYS.LAZY_LOAD_PLUGIN, on);
+            })
+          }
 
           this.sectionTitle(I18n.tx(this.appLocale, 'basicSettings.playback'))
           this.switchRow(I18n.tx(this.appLocale, 'basicSettings.notInterrupt'), '', this.notInterrupt, (on: boolean) => {
@@ -428,10 +436,12 @@ export struct BasicSettingPage {
             this.autoPlay = on;
             AppConfig.setBool(KEYS.AUTO_PLAY, on);
           })
-          this.switchRow(I18n.tx(this.appLocale, 'basicSettings.tryChangeSourceWhenPlayFail'), '', this.tryChangeSource, (on: boolean) => {
-            this.tryChangeSource = on;
-            AppConfig.setBool(KEYS.TRY_CHANGE_SOURCE, on);
-          })
+          if (!AppChannel.isStore()) {
+            this.switchRow(I18n.tx(this.appLocale, 'basicSettings.tryChangeSourceWhenPlayFail'), '', this.tryChangeSource, (on: boolean) => {
+              this.tryChangeSource = on;
+              AppConfig.setBool(KEYS.TRY_CHANGE_SOURCE, on);
+            })
+          }
           this.switchRow(I18n.tx(this.appLocale, 'basicSettings.autoStopWhenError'), '', this.autoStopError, (on: boolean) => {
             this.autoStopError = on;
             AppConfig.setBool(KEYS.AUTO_STOP_ERROR, on);
@@ -465,44 +475,50 @@ export struct BasicSettingPage {
                 this.playQualityOrder);
             })
 
-          this.sectionTitle(I18n.tx(this.appLocale, 'basicSettings.download'))
-          this.valueRow(I18n.tx(this.appLocale, 'basicSettings.downloadPath'), this.downloadPath, () => {
-            promptAction.showToast({ message: this.downloadPath, duration: 2500 });
-          })
-          this.valueRow(I18n.tx(this.appLocale, 'basicSettings.maxDownload'), `${this.maxDownload}`, () => {
-            this.openPicker('maxDownload', I18n.tx(this.appLocale, 'basicSettings.maxDownload'),
-              ['1', '3', '5', '7'], ['1', '3', '5', '7'], `${this.maxDownload}`);
-          })
-          this.valueRow(I18n.tx(this.appLocale, 'basicSettings.defaultDownloadQuality'), this.qualityLabel(this.downloadQuality), () => {
-            this.openPicker('downloadQuality', I18n.tx(this.appLocale, 'basicSettings.defaultDownloadQuality'),
-              QUALITIES,
-              [this.qualityLabel('low'), this.qualityLabel('standard'), this.qualityLabel('high'), this.qualityLabel('super')],
-              this.downloadQuality);
-          })
-          this.valueRow(I18n.tx(this.appLocale, 'basicSettings.downloadQualityOrder'),
-            this.downloadQualityOrder === 'desc' ? I18n.tx(this.appLocale, 'basicSettings.downloadQualityOrder.desc') : I18n.tx(this.appLocale, 'basicSettings.downloadQualityOrder.asc'),
-            () => {
-              this.openPicker('downloadQualityOrder', I18n.tx(this.appLocale, 'basicSettings.downloadQualityOrder'),
-                ['asc', 'desc'],
-                [I18n.tx(this.appLocale, 'basicSettings.downloadQualityOrder.asc'), I18n.tx(this.appLocale, 'basicSettings.downloadQualityOrder.desc')],
-                this.downloadQualityOrder);
+          if (!AppChannel.isStore()) {
+            this.sectionTitle(I18n.tx(this.appLocale, 'basicSettings.download'))
+            this.valueRow(I18n.tx(this.appLocale, 'basicSettings.downloadPath'), this.downloadPath, () => {
+              promptAction.showToast({ message: this.downloadPath, duration: 2500 });
             })
+            this.valueRow(I18n.tx(this.appLocale, 'basicSettings.maxDownload'), `${this.maxDownload}`, () => {
+              this.openPicker('maxDownload', I18n.tx(this.appLocale, 'basicSettings.maxDownload'),
+                ['1', '3', '5', '7'], ['1', '3', '5', '7'], `${this.maxDownload}`);
+            })
+            this.valueRow(I18n.tx(this.appLocale, 'basicSettings.defaultDownloadQuality'), this.qualityLabel(this.downloadQuality), () => {
+              this.openPicker('downloadQuality', I18n.tx(this.appLocale, 'basicSettings.defaultDownloadQuality'),
+                QUALITIES,
+                [this.qualityLabel('low'), this.qualityLabel('standard'), this.qualityLabel('high'), this.qualityLabel('super')],
+                this.downloadQuality);
+            })
+            this.valueRow(I18n.tx(this.appLocale, 'basicSettings.downloadQualityOrder'),
+              this.downloadQualityOrder === 'desc' ? I18n.tx(this.appLocale, 'basicSettings.downloadQualityOrder.desc') : I18n.tx(this.appLocale, 'basicSettings.downloadQualityOrder.asc'),
+              () => {
+                this.openPicker('downloadQualityOrder', I18n.tx(this.appLocale, 'basicSettings.downloadQualityOrder'),
+                  ['asc', 'desc'],
+                  [I18n.tx(this.appLocale, 'basicSettings.downloadQualityOrder.asc'), I18n.tx(this.appLocale, 'basicSettings.downloadQualityOrder.desc')],
+                  this.downloadQualityOrder);
+              })
+          }
 
           this.sectionTitle(I18n.tx(this.appLocale, 'basicSettings.network'))
           this.switchRow(I18n.tx(this.appLocale, 'basicSettings.useCelluarNetworkPlay'), '', this.cellularPlay, (on: boolean) => {
             this.cellularPlay = on;
             AppConfig.setBool(KEYS.CELLULAR_PLAY, on);
           })
-          this.switchRow(I18n.tx(this.appLocale, 'basicSettings.useCelluarNetworkDownload'), '', this.cellularDownload, (on: boolean) => {
-            this.cellularDownload = on;
-            AppConfig.setBool(KEYS.CELLULAR_DOWNLOAD, on);
-          })
+          if (!AppChannel.isStore()) {
+            this.switchRow(I18n.tx(this.appLocale, 'basicSettings.useCelluarNetworkDownload'), '', this.cellularDownload, (on: boolean) => {
+              this.cellularDownload = on;
+              AppConfig.setBool(KEYS.CELLULAR_DOWNLOAD, on);
+            })
+          }
 
           this.sectionTitle(I18n.tx(this.appLocale, 'basicSettings.lyric'))
-          this.switchRow(I18n.tx(this.appLocale, 'basicSettings.lyric.autoSearchLyric'), '', this.autoSearchLyric, (on: boolean) => {
-            this.autoSearchLyric = on;
-            AppConfig.setBool(KEYS.AUTO_SEARCH_LYRIC, on);
-          })
+          if (!AppChannel.isStore()) {
+            this.switchRow(I18n.tx(this.appLocale, 'basicSettings.lyric.autoSearchLyric'), '', this.autoSearchLyric, (on: boolean) => {
+              this.autoSearchLyric = on;
+              AppConfig.setBool(KEYS.AUTO_SEARCH_LYRIC, on);
+            })
+          }
           this.switchRow(I18n.tx(this.appLocale, 'basicSettings.lyric.showStatusBarLyric'), '', this.desktopLyric, (on: boolean) => {
             this.desktopLyric = on;
             FloatingLyric.setEnabled(on);

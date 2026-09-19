@@ -45,9 +45,32 @@
 1. 用 DevEco Studio 打开本仓库根目录
 2. 等待 `ohpm` / `hvigor` 同步完成
 3. 连接华为账号，配置调试签名（File → Project Structure → Signing Configs）
-4. 选择真机或模拟器，点击 Run
+4. 选择产品：`default`（GitHub 完整版）或 `store`（应用市场本地版）
+5. 选择真机或模拟器，点击 Run
 
 包名：`fun.upup.musicfree.harmony`
+
+## 两个版本
+
+同一套代码打两种包：
+
+| | GitHub 完整版 `default` | 应用市场版 `store` |
+|---|---|---|
+| 插件 / 在线搜索 / 榜单 | 有 | 无 |
+| 本地音乐、歌单、主题 | 有 | 有 |
+| 分发方式 | GitHub 安装 HAP | 华为应用市场上架 `.app` |
+
+DevEco 右上角 Product 选 `default` 或 `store`。命令行示例：
+
+```bash
+# 完整版调试 HAP
+hvigorw assembleHap -p product=default -p buildMode=debug --no-daemon
+
+# 市场版发布 APP（需发布证书）
+hvigorw assembleApp -p product=store -p buildMode=release --no-daemon
+```
+
+上架步骤、签名要求和隐私政策见 [docs/store-release.md](docs/store-release.md)、[docs/privacy.md](docs/privacy.md)。
 
 ## 使用插件
 

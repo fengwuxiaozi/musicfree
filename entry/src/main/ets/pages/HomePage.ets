@@ -8,6 +8,7 @@ import { AppService } from '../core/AppService';
 import { I18n } from '../core/I18n';
 import { UpdateService } from '../core/UpdateService';
 import { promptAction } from '@kit.ArkUI';
+import { AppChannel } from '../core/AppChannel';
 
 @Component
 struct HomeActionCard {
@@ -146,7 +147,7 @@ export struct HomePage {
 
           Row() {
             IconImg({ name: 'magnifying-glass', iconSize: 16, color: this.textHint })
-            Text(I18n.tx(this.appLocale, 'home.clickToSearch'))
+            Text(I18n.tx(this.appLocale, AppChannel.isStore() ? 'home.clickToSearchLocal' : 'home.clickToSearch'))
               .fontSize(13)
               .fontColor(this.textHint)
               .margin({ left: 6 })
@@ -158,7 +159,14 @@ export struct HomePage {
           .borderRadius(18)
           .backgroundColor(this.placeholder)
           .onClick(() => {
-            AppService.push(ROUTES.SEARCH);
+            if (AppChannel.isStore()) {
+              AppService.openSearchMusicList(
+                I18n.tx(this.appLocale, 'home.localMusic'),
+                AppService.collectSearchableMusics()
+              );
+            } else {
+              AppService.push(ROUTES.SEARCH);
+            }
           })
         }
         .width('100%')
@@ -226,20 +234,22 @@ export struct HomePage {
   @Builder
   operations() {
     Row() {
-      HomeActionCard({
-        icon: 'fire',
-        titleKey: 'home.recommendSheet',
-        onAction: () => {
-          AppService.push(ROUTES.RECOMMEND);
-        }
-      })
-      HomeActionCard({
-        icon: 'trophy',
-        titleKey: 'home.topList',
-        onAction: () => {
-          AppService.push(ROUTES.TOP_LIST);
-        }
-      })
+      if (!AppChannel.isStore()) {
+        HomeActionCard({
+          icon: 'fire',
+          titleKey: 'home.recommendSheet',
+          onAction: () => {
+            AppService.push(ROUTES.RECOMMEND);
+          }
+        })
+        HomeActionCard({
+          icon: 'trophy',
+          titleKey: 'home.topList',
+          onAction: () => {
+            AppService.push(ROUTES.TOP_LIST);
+          }
+        })
+      }
       HomeActionCard({
         icon: 'clock-outline',
         titleKey: 'home.playHistory',
@@ -306,16 +316,18 @@ export struct HomePage {
       .onClick(() => {
         this.openCreateSheet();
       })
-      Row() {
-        IconImg({ name: 'inbox-arrow-down', iconSize: 21, color: this.textColor })
+      if (!AppChannel.isStore()) {
+        Row() {
+          IconImg({ name: 'inbox-arrow-down', iconSize: 21, color: this.textColor })
+        }
+        .width(36)
+        .height(36)
+        .margin({ left: 8 })
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          AppService.push(ROUTES.IMPORT_SHEET);
+        })
       }
-      .width(36)
-      .height(36)
-      .margin({ left: 8 })
-      .justifyContent(FlexAlign.Center)
-      .onClick(() => {
-        AppService.push(ROUTES.IMPORT_SHEET);
-      })
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 8 })
@@ -429,9 +441,11 @@ export struct HomePage {
           this.drawerItem('cog-8-tooth', I18n.tx(this.appLocale, 'sidebar.basicSettings'), () => {
             AppService.push(ROUTES.BASIC);
           })
-          this.drawerItem('javascript', I18n.tx(this.appLocale, 'sidebar.pluginManagement'), () => {
-            AppService.push(ROUTES.PLUGIN);
-          })
+          if (!AppChannel.isStore()) {
+            this.drawerItem('javascript', I18n.tx(this.appLocale, 'sidebar.pluginManagement'), () => {
+              AppService.push(ROUTES.PLUGIN);
+            })
+          }
           this.drawerItem('t-shirt-outline', I18n.tx(this.appLocale, 'sidebar.themeSettings'), () => {
             AppService.push(ROUTES.THEME);
           })

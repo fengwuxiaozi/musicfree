@@ -10,7 +10,7 @@ import { CommentPage } from './CommentPage';
 import { SheetDetailPage } from './SheetDetailPage';
 import { PluginSheetPage, AlbumDetailPage, ArtistDetailPage } from './MediaDetailPages';
 import { PluginPage } from './PluginPage';
-import { SettingPage, ThemePage, AboutPage, BackupPage } from './SettingPages';
+import { SettingPage, ThemePage, AboutPage, BackupPage, PrivacyPage } from './SettingPages';
 import { BasicSettingPage } from './BasicSettingPage';
 import { HistoryPage, LocalMusicPage, TopListPage, RecommendPage } from './ExtraPages';
 import { DownloadingPage } from './DownloadingPage';
@@ -226,6 +226,11 @@ struct Index {
         .backgroundColor(this.pageBackground)
     } else if (name === ROUTES.ABOUT) {
       NavDestination() { AboutPage() }
+        .hideTitleBar(true)
+        .hideBackButton(true)
+        .backgroundColor(this.pageBackground)
+    } else if (name === ROUTES.PRIVACY) {
+      NavDestination() { PrivacyPage() }
         .hideTitleBar(true)
         .hideBackButton(true)
         .backgroundColor(this.pageBackground)

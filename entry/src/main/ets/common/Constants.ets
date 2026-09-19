@@ -72,6 +72,7 @@ export class ROUTES {
   static readonly PERMISSIONS: string = 'permissions';
   static readonly MUSIC_COMMENT: string = 'music-comment';
   static readonly IMPORT_SHEET: string = 'import-sheet';
+  static readonly PRIVACY: string = 'privacy';
 }
 
 export const WEBDAV_DIR: string = '/MusicFree';

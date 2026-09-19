@@ -6,6 +6,7 @@ import { PluginManager } from './PluginManager';
 import { showToast } from './HttpUtil';
 import { AppConfig, KEYS } from './AppConfig';
 import { I18n } from './I18n';
+import { AppChannel } from './AppChannel';
 
 export enum DownloadStatus {
   Pending = 0,
@@ -110,6 +111,9 @@ export class Downloader {
   }
 
   downloadList(items: MusicItem[]): void {
+    if (AppChannel.isStore()) {
+      return;
+    }
     const added: DownloadTask[] = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];

@@ -15,6 +15,7 @@ import { AppService } from '../core/AppService';
 import { I18n } from '../core/I18n';
 import { showToast } from '../core/HttpUtil';
 import { picker } from '@kit.CoreFileKit';
+import { AppChannel } from '../core/AppChannel';
 
 class TopGroup {
   title: string = '';
@@ -147,7 +148,10 @@ export struct LocalMusicPage {
     Column() {
       AppNavBar({
         title: I18n.tx(this.appLocale, 'home.localMusic'),
-        menuTitles: [
+        menuTitles: AppChannel.isStore() ? [
+          I18n.tx(this.appLocale, 'localMusic.scanLocalMusic'),
+          I18n.tx(this.appLocale, 'common.batchEdit')
+        ] : [
           I18n.tx(this.appLocale, 'localMusic.scanLocalMusic'),
           I18n.tx(this.appLocale, 'common.batchEdit'),
           I18n.tx(this.appLocale, 'localMusic.downloadList')
@@ -160,7 +164,7 @@ export struct LocalMusicPage {
             this.pickFiles();
           } else if (index === 1) {
             AppService.openMusicListEditor(I18n.tx(this.appLocale, 'home.localMusic'), LOCAL_SHEET_ID, this.list);
-          } else if (index === 2) {
+          } else if (index === 2 && !AppChannel.isStore()) {
             AppService.push(ROUTES.DOWNLOADING);
           }
         }

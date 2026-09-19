@@ -553,6 +553,7 @@ export struct PluginPage {
           menuTitles: [
             I18n.tx(this.appLocale, 'pluginSetting.menu.subscriptionSetting'),
             I18n.tx(this.appLocale, 'pluginSetting.menu.sort'),
+            I18n.tx(this.appLocale, 'pluginSetting.menu.dedupe'),
             I18n.tx(this.appLocale, 'pluginSetting.menu.uninstallAll')
           ],
           onBack: () => {
@@ -782,8 +783,31 @@ export struct PluginPage {
     } else if (index === 1) {
       AppService.push(ROUTES.PLUGIN_SORT);
     } else if (index === 2) {
+      this.dedupePlugins();
+    } else if (index === 3) {
       this.showUninstallAll = true;
     }
+  }
+
+  private async dedupePlugins(): Promise<void> {
+    if (this.busy) {
+      return;
+    }
+    this.busy = true;
+    try {
+      const count = await AppService.plugins.dedupe();
+      if (count === 0) {
+        promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.pluginDedupeNone'), duration: 2000 });
+      } else {
+        promptAction.showToast({
+          message: I18n.tx(this.appLocale, 'toast.pluginDedupeDone').replace('{count}', `${count}`),
+          duration: 2500
+        });
+      }
+    } catch (_e) {
+      promptAction.showToast({ message: I18n.tx(this.appLocale, 'toast.pluginDedupeFail'), duration: 2500 });
+    }
+    this.busy = false;
   }
 
   private handleFabAction(index: number): void {

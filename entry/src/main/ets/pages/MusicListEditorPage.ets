@@ -6,6 +6,7 @@ import { EmptyView } from '../components/EmptyView';
 import { AppService } from '../core/AppService';
 import { showToast } from '../core/HttpUtil';
 import { I18n } from '../core/I18n';
+import { AppChannel } from '../core/AppChannel';
 
 class EditorRow {
   item: MusicItem = new MusicItem();
@@ -278,9 +279,11 @@ export struct MusicListEditorPage {
         this.bottomBtn('folder-plus', I18n.tx(this.appLocale, 'musicListEditor.addToSheet'), true, () => {
           this.openSheets();
         })
-        this.bottomBtn('arrow-down-tray', I18n.tx(this.appLocale, 'common.download'), true, () => {
-          this.downloadSelected();
-        })
+        if (!AppChannel.isStore()) {
+          this.bottomBtn('arrow-down-tray', I18n.tx(this.appLocale, 'common.download'), true, () => {
+            this.downloadSelected();
+          })
+        }
         this.bottomBtn('trash-outline', I18n.tx(this.appLocale, 'common.delete'), this.canDelete(), () => {
           this.deleteSelected();
         })

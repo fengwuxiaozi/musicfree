@@ -16,6 +16,7 @@ import { I18n } from './I18n';
 import { UpdateService } from './UpdateService';
 import { LyricExtra } from './LyricExtra';
 import { fileTitleFromUri } from './HttpUtil';
+import { AppChannel } from './AppChannel';
 
 export class NavParams {
   sheetId: string = '';
@@ -119,6 +120,12 @@ export class AppService {
       return;
     }
     AppService.sandboxReady = true;
+    if (AppChannel.isStore()) {
+      if (AppConfig.getBool(KEYS.AUTO_PLAY, false) && AppService.history.list.length > 0) {
+        AppService.player.playMusic(AppService.history.list[0]);
+      }
+      return;
+    }
     await AppService.plugins.reloadAll();
     if (AppConfig.getBool(KEYS.AUTO_UPDATE_PLUGIN, false)) {
       try {
@@ -170,6 +177,33 @@ export class AppService {
     AppService.params.searchListTitle = title;
     AppService.params.searchList = musics.slice();
     AppService.push(ROUTES.SEARCH_MUSIC_LIST);
+  }
+
+  static collectSearchableMusics(): MusicItem[] {
+    const out: MusicItem[] = [];
+    const seen: Record<string, boolean> = {};
+    const add = (item: MusicItem): void => {
+      const key = `${item.platform}|${item.id}|${item.url}`;
+      if (seen[key]) {
+        return;
+      }
+      seen[key] = true;
+      out.push(item);
+    };
+    for (let i = 0; i < AppService.localMusics.length; i++) {
+      add(AppService.localMusics[i]);
+    }
+    const sheets = AppService.sheets.sheets;
+    for (let s = 0; s < sheets.length; s++) {
+      const musics = AppService.sheets.getMusics(sheets[s].id);
+      for (let m = 0; m < musics.length; m++) {
+        add(musics[m]);
+      }
+    }
+    for (let h = 0; h < AppService.history.list.length; h++) {
+      add(AppService.history.list[h]);
+    }
+    return out;
   }
 
   static openSearchLyric(query: string): void {

@@ -8,6 +8,7 @@ import { LOCAL_PLATFORM } from '../common/Constants';
 import { I18n } from './I18n';
 import { AppConfig, KEYS } from './AppConfig';
 import { UpdateService } from './UpdateService';
+import { AppChannel } from './AppChannel';
 
 const PLUGIN_SEARCH_TIMEOUT = 8000;
 
@@ -29,6 +30,11 @@ class SavedPluginState {
   enabled: boolean = true;
   alternativePlugin: string = '';
   userVariableValues: Record<string, string> = {};
+}
+
+class PluginDedupeSplit {
+  kept: PluginMeta[] = [];
+  removed: PluginMeta[] = [];
 }
 
 export class PluginManager {
@@ -73,6 +79,11 @@ export class PluginManager {
   }
 
   async reloadAll(): Promise<void> {
+    if (AppChannel.isStore()) {
+      this.plugins = [];
+      this.emit();
+      return;
+    }
     const savedList = this.readSavedList();
     const names = AppStorageUtil.listFiles(AppStorageUtil.pluginDir());
     const next: PluginMeta[] = [];
@@ -107,9 +118,11 @@ export class PluginManager {
       next.push(meta);
     }
     next.sort((a: PluginMeta, b: PluginMeta) => a.order - b.order);
-    this.plugins = next;
+    const unique = this.splitUnique(next);
+    this.plugins = unique.kept;
     this.saveOrder();
     this.emit();
+    await this.dropPlugins(unique.removed);
   }
 
   private async mount(path: string, code: string, userVariableValues: Record<string, string>): Promise<PluginMeta> {
@@ -166,6 +179,9 @@ export class PluginManager {
   }
 
   async installFromUrl(url: string): Promise<void> {
+    if (AppChannel.isStore()) {
+      return;
+    }
     const trimmed = url.trim();
     if (this.isJsonPluginUrl(trimmed)) {
       await this.installFromSubscribe(trimmed);
@@ -208,6 +224,10 @@ export class PluginManager {
       if (src.length === 0 || src === 'undefined' || src === 'null') {
         continue;
       }
+      if (this.findBySrcUrl(src) !== null) {
+        ok += 1;
+        continue;
+      }
       try {
         await this.installFromUrl(src);
         ok += 1;
@@ -220,6 +240,9 @@ export class PluginManager {
   }
 
   async installCode(code: string, srcUrl: string): Promise<void> {
+    if (AppChannel.isStore()) {
+      throw new Error(I18n.t('toast.pluginUnrecognized'));
+    }
     const trimmed = code.trim();
     if (trimmed.length === 0) {
       throw new Error(I18n.t('toast.pluginUnrecognized'));
@@ -284,6 +307,82 @@ export class PluginManager {
     for (let j = 0; j < oldPaths.length; j++) {
       if (oldPaths[j] !== path) {
         AppStorageUtil.removeFile(oldPaths[j]);
+      }
+    }
+  }
+
+  async dedupe(): Promise<number> {
+    const unique = this.splitUnique(this.plugins);
+    if (unique.removed.length === 0) {
+      return 0;
+    }
+    this.plugins = unique.kept;
+    this.saveOrder();
+    this.emit();
+    await this.dropPlugins(unique.removed);
+    return unique.removed.length;
+  }
+
+  private pluginDedupeKey(p: PluginMeta): string {
+    const platform = p.platform.trim();
+    if (platform.length > 0) {
+      return `p:${platform}`;
+    }
+    const src = p.srcUrl.trim();
+    if (src.length > 0) {
+      return `u:${src}`;
+    }
+    return `h:${p.hash}`;
+  }
+
+  private preferPlugin(a: PluginMeta, b: PluginMeta): boolean {
+    const cmp = UpdateService.compareVersion(a.version, b.version);
+    if (cmp > 0) {
+      return true;
+    }
+    if (cmp < 0) {
+      return false;
+    }
+    if (a.enabled !== b.enabled) {
+      return a.enabled;
+    }
+    return a.order < b.order;
+  }
+
+  private splitUnique(list: PluginMeta[]): PluginDedupeSplit {
+    const best: Record<string, PluginMeta> = {};
+    const keys: string[] = [];
+    const removed: PluginMeta[] = [];
+    for (let i = 0; i < list.length; i++) {
+      const item = list[i];
+      const key = this.pluginDedupeKey(item);
+      const current = best[key];
+      if (current === undefined) {
+        best[key] = item;
+        keys.push(key);
+      } else if (this.preferPlugin(item, current)) {
+        removed.push(current);
+        best[key] = item;
+      } else {
+        removed.push(item);
+      }
+    }
+    const kept: PluginMeta[] = [];
+    for (let j = 0; j < keys.length; j++) {
+      kept.push(best[keys[j]]);
+    }
+    kept.sort((a: PluginMeta, b: PluginMeta) => a.order - b.order);
+    const out = new PluginDedupeSplit();
+    out.kept = kept;
+    out.removed = removed;
+    return out;
+  }
+
+  private async dropPlugins(list: PluginMeta[]): Promise<void> {
+    for (let i = 0; i < list.length; i++) {
+      await PluginSandbox.instance().unloadPlugin(list[i].hash);
+      if (list[i].path.length > 0) {
+        AppStorageUtil.removeFile(list[i].path);
       }
     }
   }
@@ -394,6 +493,9 @@ export class PluginManager {
   }
 
   async search(query: string, page: number, type: string): Promise<string> {
+    if (AppChannel.isStore()) {
+      return '[]';
+    }
     const hashes = this.searchHashes();
     const tasks: Promise<string>[] = [];
     for (let i = 0; i < hashes.length; i++) {
@@ -460,6 +562,9 @@ export class PluginManager {
     }
     if (item.url.indexOf('file://') === 0 || (item.url.indexOf('/') === 0 && item.url.indexOf('http') !== 0)) {
       source.url = item.url;
+      return source;
+    }
+    if (AppChannel.isStore()) {
       return source;
     }
     if (allowFallback) {

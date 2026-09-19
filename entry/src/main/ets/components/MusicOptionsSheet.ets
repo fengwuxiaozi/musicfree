@@ -8,6 +8,7 @@ import { I18n } from '../core/I18n';
 import { MediaCache } from '../core/MediaCache';
 import { LyricExtra } from '../core/LyricExtra';
 import { showToast } from '../core/HttpUtil';
+import { AppChannel } from '../core/AppChannel';
 
 @Component
 export struct MusicOptionsSheet {
@@ -164,14 +165,16 @@ export struct MusicOptionsSheet {
             this.moreRow('folder-plus', I18n.tx(this.appLocale, 'musicListEditor.addToSheet'), () => {
               this.startPickSheet();
             })
-            if (!this.downloaded()) {
-              this.moreRow('arrow-down-tray', I18n.tx(this.appLocale, 'common.download'), () => {
-                AppService.downloader.download(this.item);
-                this.onClose();
-              })
-            } else {
-              this.moreRow('check-circle-outline', I18n.tx(this.appLocale, 'panel.musicItemOptions.downloaded'), () => {
-              })
+            if (!AppChannel.isStore()) {
+              if (!this.downloaded()) {
+                this.moreRow('arrow-down-tray', I18n.tx(this.appLocale, 'common.download'), () => {
+                  AppService.downloader.download(this.item);
+                  this.onClose();
+                })
+              } else {
+                this.moreRow('check-circle-outline', I18n.tx(this.appLocale, 'panel.musicItemOptions.downloaded'), () => {
+                })
+              }
             }
             if (this.sheetId.length > 0) {
               this.moreRow('trash-outline', I18n.tx(this.appLocale, 'common.delete'), () => {

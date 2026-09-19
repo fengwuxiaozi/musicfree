@@ -9,6 +9,7 @@ import { formatTime, showToast } from '../core/HttpUtil';
 import { LyricExtra } from '../core/LyricExtra';
 import { FloatingLyric } from '../core/FloatingLyric';
 import { I18n } from '../core/I18n';
+import { AppChannel } from '../core/AppChannel';
 import { pasteboard } from '@kit.BasicServicesKit';
 
 @Component
@@ -311,6 +312,9 @@ export struct MusicDetailPage {
   }
 
   private searchLyric(): void {
+    if (AppChannel.isStore()) {
+      return;
+    }
     const current = AppService.player.current;
     if (current === null) {
       return;
@@ -394,6 +398,9 @@ export struct MusicDetailPage {
   }
 
   private downloadCurrent(): void {
+    if (AppChannel.isStore()) {
+      return;
+    }
     const current = AppService.player.current;
     if (current === null) {
       return;
@@ -781,14 +788,16 @@ export struct MusicDetailPage {
           .fontSize(15)
           .fontColor(this.detailSecondary)
           .margin({ top: 28 })
-        Text(I18n.tx(this.appLocale, 'lyric.searchLyric'))
-          .fontSize(15)
-          .fontColor('#66EEFF')
-          .decoration({ type: TextDecorationType.Underline })
-          .margin({ top: 10 })
-          .onClick(() => {
-            this.searchLyric();
-          })
+        if (!AppChannel.isStore()) {
+          Text(I18n.tx(this.appLocale, 'lyric.searchLyric'))
+            .fontSize(15)
+            .fontColor('#66EEFF')
+            .decoration({ type: TextDecorationType.Underline })
+            .margin({ top: 10 })
+            .onClick(() => {
+              this.searchLyric();
+            })
+        }
       } else {
         Text(this.coverLyricText(-1))
           .fontSize(13)
@@ -870,26 +879,28 @@ export struct MusicDetailPage {
       .onClick(() => {
         this.cycleQuality();
       })
-      Column() {
-        PlayTapIcon({
-          name: this.downloaded ? 'check-circle-outline' : 'arrow-down-tray',
-          iconSize: 22,
-          iconColor: this.detailText,
-          label: '下载',
-          onAction: () => {
-            this.downloadCurrent();
-          }
+      if (!AppChannel.isStore()) {
+        Column() {
+          PlayTapIcon({
+            name: this.downloaded ? 'check-circle-outline' : 'arrow-down-tray',
+            iconSize: 22,
+            iconColor: this.detailText,
+            label: '下载',
+            onAction: () => {
+              this.downloadCurrent();
+            }
+          })
+        }
+        .layoutWeight(1)
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .backgroundColor('#00000000')
+        .hitTestBehavior(HitTestMode.Default)
+        .onClick(() => {
+          this.downloadCurrent();
         })
       }
-      .layoutWeight(1)
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-      .backgroundColor('#00000000')
-      .hitTestBehavior(HitTestMode.Default)
-      .onClick(() => {
-        this.downloadCurrent();
-      })
       Column() {
         Text(this.rateLabel())
           .fontSize(12)
@@ -1017,15 +1028,17 @@ export struct MusicDetailPage {
           .onClick(() => {
             this.setShowLyric(false);
           })
-        Text(I18n.tx(this.appLocale, 'lyric.searchLyric'))
-          .fontSize(this.lyricFontSize)
-          .fontColor('#66EEFF')
-          .decoration({ type: TextDecorationType.Underline })
-          .margin({ top: 14 })
-          .padding({ top: 8, bottom: 8, left: 16, right: 16 })
-          .onClick(() => {
-            this.searchLyric();
-          })
+        if (!AppChannel.isStore()) {
+          Text(I18n.tx(this.appLocale, 'lyric.searchLyric'))
+            .fontSize(this.lyricFontSize)
+            .fontColor('#66EEFF')
+            .decoration({ type: TextDecorationType.Underline })
+            .margin({ top: 14 })
+            .padding({ top: 8, bottom: 8, left: 16, right: 16 })
+            .onClick(() => {
+              this.searchLyric();
+            })
+        }
       }
       .width('100%')
       .height('100%')
@@ -1082,26 +1095,28 @@ export struct MusicDetailPage {
       .onClick(() => {
         this.openOffset();
       })
-      Column() {
-        PlayTapIcon({
-          name: 'magnifying-glass',
-          iconSize: 22,
-          iconColor: this.detailText,
-          label: I18n.tx(this.appLocale, 'lyric.searchLyric'),
-          onAction: () => {
-            this.searchLyric();
-          }
+      if (!AppChannel.isStore()) {
+        Column() {
+          PlayTapIcon({
+            name: 'magnifying-glass',
+            iconSize: 22,
+            iconColor: this.detailText,
+            label: I18n.tx(this.appLocale, 'lyric.searchLyric'),
+            onAction: () => {
+              this.searchLyric();
+            }
+          })
+        }
+        .layoutWeight(1)
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .backgroundColor('#00000000')
+        .hitTestBehavior(HitTestMode.Default)
+        .onClick(() => {
+          this.searchLyric();
         })
       }
-      .layoutWeight(1)
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-      .backgroundColor('#00000000')
-      .hitTestBehavior(HitTestMode.Default)
-      .onClick(() => {
-        this.searchLyric();
-      })
       Column() {
         PlayTapIcon({
           name: 'translation',

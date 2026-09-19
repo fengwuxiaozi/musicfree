@@ -10,6 +10,7 @@ import { HttpUtil } from '../core/HttpUtil';
 import { picker } from '@kit.CoreFileKit';
 import { promptAction } from '@kit.ArkUI';
 import { Want } from '@kit.AbilityKit';
+import { AppChannel } from '../core/AppChannel';
 
 @Component
 export struct SettingPage {
@@ -21,7 +22,9 @@ export struct SettingPage {
     Column() {
       AppNavBar({ title: I18n.tx(this.appLocale, 'common.setting'), onBack: () => { AppService.pop(); } })
       this.item('cog-8-tooth', I18n.tx(this.appLocale, 'sidebar.basicSettings'), () => { AppService.push(ROUTES.BASIC); })
-      this.item('javascript', I18n.tx(this.appLocale, 'sidebar.pluginManagement'), () => { AppService.push(ROUTES.PLUGIN); })
+      if (!AppChannel.isStore()) {
+        this.item('javascript', I18n.tx(this.appLocale, 'sidebar.pluginManagement'), () => { AppService.push(ROUTES.PLUGIN); })
+      }
       this.item('t-shirt-outline', I18n.tx(this.appLocale, 'sidebar.themeSettings'), () => { AppService.push(ROUTES.THEME); })
       this.item('circle-stack', I18n.tx(this.appLocale, 'sidebar.backupAndResume'), () => { AppService.push(ROUTES.BACKUP); })
       this.item('information-circle', I18n.tx(this.appLocale, 'common.about'), () => { AppService.push(ROUTES.ABOUT); })
@@ -235,7 +238,7 @@ export struct AboutPage {
   @StorageLink('appLocale') appLocale: string = 'zh-CN';
   @StorageLink('gestureBarHeight') gestureBarHeight: number = 16;
 
-  private async openSource(): Promise<void> {
+  private async openUrl(url: string): Promise<void> {
     const ctx = AppService.context;
     if (ctx === null) {
       return;
@@ -243,12 +246,16 @@ export struct AboutPage {
     const want: Want = {
       action: 'ohos.want.action.viewData',
       entities: ['entity.system.browsable'],
-      uri: 'https://github.com/maotoumao/MusicFree'
+      uri: url
     };
     try {
       await ctx.startAbility(want);
     } catch (_e) {
     }
+  }
+
+  private async openSource(): Promise<void> {
+    await this.openUrl('https://github.com/maotoumao/MusicFree');
   }
 
   build() {
@@ -269,7 +276,7 @@ export struct AboutPage {
             .fontWeight(FontWeight.Bold)
             .fontColor(this.textColor)
             .margin({ top: 12 })
-          Text(`${I18n.tx(this.appLocale, 'about.harmonyVersion')}  ${APP_VERSION}`)
+          Text(`${I18n.tx(this.appLocale, 'about.harmonyVersion')}  ${APP_VERSION}${AppChannel.isStore() ? ` · ${I18n.tx(this.appLocale, 'about.channelStore')}` : ''}`)
             .fontSize(13)
             .fontColor(this.textSecondary)
             .margin({ top: 4 })
@@ -300,7 +307,7 @@ export struct AboutPage {
             .padding({ left: 4 })
 
           Column() {
-            Text(I18n.tx(this.appLocale, 'about.intro'))
+            Text(I18n.tx(this.appLocale, AppChannel.isStore() ? 'about.introStore' : 'about.intro'))
               .fontSize(13)
               .fontColor(this.textColor)
               .lineHeight(22)
@@ -327,11 +334,30 @@ export struct AboutPage {
               this.openSource();
             })
             Divider().color(this.divider).strokeWidth(1).margin({ top: 16, bottom: 12 })
-            Text(I18n.tx(this.appLocale, 'about.pluginHint'))
-              .fontSize(12)
-              .fontColor(this.textSecondary)
-              .lineHeight(20)
-              .width('100%')
+            Row() {
+              Text(I18n.tx(this.appLocale, 'about.privacy'))
+                .fontSize(13)
+                .fontColor(this.primary)
+            }
+            .width('100%')
+            .onClick(() => {
+              AppService.push(ROUTES.PRIVACY);
+            })
+            if (!AppChannel.isStore()) {
+              Text(I18n.tx(this.appLocale, 'about.pluginHint'))
+                .fontSize(12)
+                .fontColor(this.textSecondary)
+                .lineHeight(20)
+                .width('100%')
+                .margin({ top: 12 })
+            } else {
+              Text(I18n.tx(this.appLocale, 'about.storeHint'))
+                .fontSize(12)
+                .fontColor(this.textSecondary)
+                .lineHeight(20)
+                .width('100%')
+                .margin({ top: 12 })
+            }
           }
           .width('100%')
           .padding({ left: 16, right: 16, top: 16, bottom: 16 })
@@ -366,6 +392,63 @@ export struct AboutPage {
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+  }
+}
+
+@Component
+export struct PrivacyPage {
+  @StorageLink('pageBackground') pageBackground: string = '#202020';
+  @StorageLink('textColor') textColor: string = '#FCFCFC';
+  @StorageLink('textSecondary') textSecondary: string = '#B3FCFCFC';
+  @StorageLink('backdrop') backdrop: string = '#303030';
+  @StorageLink('appLocale') appLocale: string = 'zh-CN';
+  @StorageLink('gestureBarHeight') gestureBarHeight: number = 16;
+
+  build() {
+    Column() {
+      AppNavBar({ title: I18n.tx(this.appLocale, 'about.privacy'), onBack: () => { AppService.pop(); } })
+      Scroll() {
+        Column() {
+          this.block(I18n.tx(this.appLocale, 'privacy.collectTitle'), I18n.tx(this.appLocale, 'privacy.collectBody'))
+          this.block(I18n.tx(this.appLocale, 'privacy.permissionTitle'), I18n.tx(this.appLocale, 'privacy.permissionBody'))
+          this.block(I18n.tx(this.appLocale, 'privacy.thirdTitle'), I18n.tx(this.appLocale, 'privacy.thirdBody'))
+          if (!AppChannel.isStore()) {
+            this.block(I18n.tx(this.appLocale, 'privacy.pluginTitle'), I18n.tx(this.appLocale, 'privacy.pluginBody'))
+          }
+          this.block(I18n.tx(this.appLocale, 'privacy.contactTitle'), I18n.tx(this.appLocale, 'privacy.contactBody'))
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 12, bottom: 28 + this.gestureBarHeight })
+      }
+      .layoutWeight(1)
+      .scrollBar(BarState.Off)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(this.pageBackground)
+  }
+
+  @Builder
+  block(title: string, body: string) {
+    Column() {
+      Text(title)
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.textColor)
+        .width('100%')
+      Text(body)
+        .fontSize(13)
+        .fontColor(this.textSecondary)
+        .lineHeight(22)
+        .width('100%')
+        .margin({ top: 8 })
+    }
+    .width('100%')
+    .padding(16)
+    .margin({ bottom: 12 })
+    .alignItems(HorizontalAlign.Start)
+    .backgroundColor(this.backdrop)
+    .borderRadius(12)
   }
 }
 
