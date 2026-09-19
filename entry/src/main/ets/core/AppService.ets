@@ -835,13 +835,7 @@ export class AppService {
   }
 
   private static findPluginBySrcUrl(srcUrl: string): PluginMeta | null {
-    const list = AppService.plugins.plugins;
-    for (let i = 0; i < list.length; i++) {
-      if (list[i].srcUrl === srcUrl) {
-        return list[i];
-      }
-    }
-    return null;
+    return AppService.plugins.findBySrcUrl(srcUrl);
   }
 
   private static restoreStarred(obj: Record<string, Object>): void {

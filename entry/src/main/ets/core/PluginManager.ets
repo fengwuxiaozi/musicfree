@@ -264,8 +264,10 @@ export class PluginManager {
     const oldPaths: string[] = [];
     const oldHashes: string[] = [];
     const next: PluginMeta[] = [];
+    const incomingKey = this.normalizePluginUrl(probe.srcUrl.length > 0 ? probe.srcUrl : srcUrl);
     for (let i = 0; i < this.plugins.length; i++) {
-      if (this.plugins[i].platform !== probe.platform) {
+      const sameSource = incomingKey.length > 0 && this.pluginDedupeKey(this.plugins[i]) === incomingKey;
+      if (!sameSource) {
         next.push(this.plugins[i]);
       } else {
         if (!notCheck && UpdateService.compareVersion(this.plugins[i].version, probe.version) > 0) {
@@ -289,7 +291,7 @@ export class PluginManager {
       await PluginSandbox.instance().unloadPlugin(meta.hash);
       throw new Error(meta.errorMsg.length > 0 ? meta.errorMsg : I18n.t('toast.installPluginFail'));
     }
-    meta.srcUrl = srcUrl;
+    meta.srcUrl = probe.srcUrl.length > 0 ? probe.srcUrl : srcUrl;
     meta.enabled = oldEnabled;
     meta.order = oldOrder;
     meta.alternativePlugin = oldAlt;
@@ -324,15 +326,113 @@ export class PluginManager {
   }
 
   private pluginDedupeKey(p: PluginMeta): string {
-    const platform = p.platform.trim();
-    if (platform.length > 0) {
-      return `p:${platform}`;
-    }
-    const src = p.srcUrl.trim();
+    const src = this.normalizePluginUrl(p.srcUrl);
     if (src.length > 0) {
-      return `u:${src}`;
+      return src;
     }
     return `h:${p.hash}`;
+  }
+
+  private normalizePluginUrl(url: string): string {
+    let s = url.trim();
+    if (s.length === 0) {
+      return '';
+    }
+    const hashIdx = s.indexOf('#');
+    if (hashIdx >= 0) {
+      s = s.substring(0, hashIdx);
+    }
+    const queryIdx = s.indexOf('?');
+    if (queryIdx >= 0) {
+      s = s.substring(0, queryIdx);
+    }
+    s = s.trim().toLowerCase();
+    if (s.startsWith('http://')) {
+      s = `https://${s.substring(7)}`;
+    }
+    while (s.endsWith('/')) {
+      s = s.substring(0, s.length - 1);
+    }
+    if (s.startsWith('https://www.')) {
+      s = `https://${s.substring(12)}`;
+    }
+    const mirrored = this.canonicalPluginMirror(s);
+    if (mirrored.length > 0) {
+      return mirrored;
+    }
+    return s;
+  }
+
+  private canonicalPluginMirror(s: string): string {
+    const rawGh = 'https://raw.githubusercontent.com/';
+    if (s.startsWith(rawGh)) {
+      return this.canonicalRepoPath('gh', s.substring(rawGh.length), true);
+    }
+    const github = 'https://github.com/';
+    if (s.startsWith(github)) {
+      const rest = s.substring(github.length);
+      const rawAt = rest.indexOf('/raw/');
+      if (rawAt > 0) {
+        return this.canonicalRepoPath('gh', `${rest.substring(0, rawAt)}/${rest.substring(rawAt + 5)}`, true);
+      }
+    }
+    const jsd = 'https://cdn.jsdelivr.net/gh/';
+    if (s.startsWith(jsd)) {
+      const rest = s.substring(jsd.length);
+      const at = rest.indexOf('@');
+      if (at > 0) {
+        const slash = rest.indexOf('/', at);
+        if (slash > at) {
+          return `gh:${rest.substring(0, at)}/${rest.substring(slash + 1)}`;
+        }
+      }
+    }
+    const gitee = 'https://gitee.com/';
+    if (s.startsWith(gitee)) {
+      const rest = s.substring(gitee.length);
+      const rawAt = rest.indexOf('/raw/');
+      if (rawAt > 0) {
+        return this.canonicalRepoPath('gitee', `${rest.substring(0, rawAt)}/${rest.substring(rawAt + 5)}`, true);
+      }
+    }
+    const gitcode = 'https://raw.gitcode.com/';
+    if (s.startsWith(gitcode)) {
+      const rest = s.substring(gitcode.length);
+      const rawAt = rest.indexOf('/raw/');
+      if (rawAt > 0) {
+        return this.canonicalRepoPath('gitcode', `${rest.substring(0, rawAt)}/${rest.substring(rawAt + 5)}`, true);
+      }
+      return this.canonicalRepoPath('gitcode', rest, true);
+    }
+    return '';
+  }
+
+  private canonicalRepoPath(kind: string, rest: string, dropRef: boolean): string {
+    const parts: string[] = [];
+    let remain = rest;
+    while (remain.length > 0) {
+      const slash = remain.indexOf('/');
+      if (slash < 0) {
+        parts.push(remain);
+        break;
+      }
+      parts.push(remain.substring(0, slash));
+      remain = remain.substring(slash + 1);
+    }
+    if (parts.length < 3) {
+      return `${kind}:${rest}`;
+    }
+    const user = parts[0];
+    const repo = parts[1];
+    const start = dropRef ? 3 : 2;
+    if (start >= parts.length) {
+      return `${kind}:${user}/${repo}`;
+    }
+    let path = parts[start];
+    for (let i = start + 1; i < parts.length; i++) {
+      path = `${path}/${parts[i]}`;
+    }
+    return `${kind}:${user}/${repo}/${path}`;
   }
 
   private preferPlugin(a: PluginMeta, b: PluginMeta): boolean {
@@ -1556,9 +1656,13 @@ export class PluginManager {
     return null;
   }
 
-  private findBySrcUrl(srcUrl: string): PluginMeta | null {
+  findBySrcUrl(srcUrl: string): PluginMeta | null {
+    const key = this.normalizePluginUrl(srcUrl);
+    if (key.length === 0) {
+      return null;
+    }
     for (let i = 0; i < this.plugins.length; i++) {
-      if (this.plugins[i].srcUrl === srcUrl) {
+      if (this.normalizePluginUrl(this.plugins[i].srcUrl) === key) {
         return this.plugins[i];
       }
     }
