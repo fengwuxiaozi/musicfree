@@ -1,6 +1,6 @@
 # MusicFree HarmonyOS NEXT
 
-这是 MusicFree 的 **鸿蒙原生版**（ArkTS / ArkUI）。用 DevEco Studio 打开 `harmonyos` 目录即可编译运行。
+这是 MusicFree 的 **鸿蒙原生版**（ArkTS / ArkUI）。用 DevEco Studio 打开本仓库根目录即可编译运行。
 
 ## 和原版的对应关系
 
@@ -29,7 +29,7 @@
 
 ## 打开与运行
 
-1. 用 DevEco Studio 打开本目录：`harmonyos/`
+1. 用 DevEco Studio 打开本仓库根目录
 2. 等待 `ohpm` / `hvigor` 同步完成
 3. 连接华为账号，配置调试签名（File → Project Structure → Signing Configs）
 4. 选择真机或模拟器，点击 Run

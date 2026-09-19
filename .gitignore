@@ -38,8 +38,11 @@ local.properties
 **/build
 .hvigor
 .cxx
+.clangd
+.clang-format
+.clang-tidy
 **/.test
 oh-package-lock.json5
 **/.preview
 **/BuildProfile.ets
-/harmonyos/entry/src/main/resources/rawfile/plugins
+/entry/src/main/resources/rawfile/plugins
